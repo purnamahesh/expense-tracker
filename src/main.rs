@@ -1,8 +1,9 @@
-use std::{env::args, fs::File, io::{self, Error, ErrorKind}, process::exit};
+use std::{env::args, process::exit};
 
 pub mod utils;
+pub mod config;
 
-use crate::utils::{expense::Expense};
+use crate::utils::{expense::Expense, file_parser::{self, append_expense}};
 
 fn main() {
 
@@ -27,7 +28,7 @@ fn main() {
         }
         else if args[1] == "add" {
             let new_expense = Expense::new(&args);
-            dbg!(new_expense);
+            append_expense(new_expense.to_csv_record().as_bytes(), None);
         }
         else if args[1] == "filter" {
             
@@ -39,4 +40,3 @@ fn main() {
     // get_and_prcess_input();
     
 }
-

@@ -1,4 +1,4 @@
-use std::{process::exit, vec};
+use std::{fmt::format, process::exit, vec};
 
 #[derive(Debug)]
 pub struct Expense<'a> {
@@ -59,5 +59,9 @@ impl<'a> Expense<'a> {
             return false;
         }
         return true;
+    }
+
+    pub fn to_csv_record(&self) -> String {
+        format!("{},{},\"{}\",\"{}\"\n", self.category.unwrap_or(""), self.amount, self.description.unwrap_or(""), self.tags.join(","))
     }
 }
