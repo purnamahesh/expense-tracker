@@ -1,4 +1,7 @@
-use std::{fmt::format, process::exit, vec};
+use std::{process::exit, vec};
+
+use crate::utils::file_parser::read_file_content;
+use crate::config::HEADER;
 
 #[derive(Debug)]
 pub struct Expense<'a> {
@@ -64,4 +67,20 @@ impl<'a> Expense<'a> {
     pub fn to_csv_record(&self) -> String {
         format!("{}|{}|\"{}\"|\"{}\"\n", self.category.unwrap_or(""), self.amount, self.description.unwrap_or(""), self.tags.join(","))
     }
+
+    pub fn list_expenses() {
+
+        let content = read_file_content(None);
+
+        println!("{}", HEADER);
+        for line in content.trim().split('\n') {
+            let x = line.split('|').collect::<Vec<&str>>(); 
+            println!(
+                "{}, {}, {}, {}",
+                x[0], x[1], x[2], x[3]
+            );
+        }
+    }
+ 
+    
 }

@@ -16,7 +16,7 @@ pub fn append_expense(content: &[u8], file_path: Option<&str>) {
     file.write_all(content);
 }
 
-pub fn read_file(file_path: Option<&str>) {
+pub fn read_file_content(file_path: Option<&str>) -> String{
     let path = file_path.unwrap_or(config::DEFAULT_PATH);
     let mut file = OpenOptions::new()
     .read(true)
@@ -34,12 +34,5 @@ pub fn read_file(file_path: Option<&str>) {
 
     file.read_to_string(&mut content);
 
-    println!("{}", HEADER);
-    for line in content.trim().split('\n') {
-        let x = line.split('|').collect::<Vec<&str>>(); 
-        println!(
-            "{}, {}, {}, {}",
-            x[0], x[1], x[2], x[3]
-        );
-    }
+    content
 }

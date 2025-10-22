@@ -3,7 +3,7 @@ use std::{env::args, process::exit};
 pub mod utils;
 pub mod config;
 
-use crate::utils::{expense::Expense, file_parser::{self, append_expense, read_file}};
+use crate::utils::{expense::Expense, file_parser::{self, append_expense}};
 
 fn main() {
 
@@ -20,7 +20,7 @@ fn main() {
             println!("HELP")
         }
         else if args[1] == "list" {
-            read_file(None);
+            Expense::list_expenses();
         }
         else if args[1] == "total" {
             
