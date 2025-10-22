@@ -44,14 +44,23 @@ This project includes automated version bumping using semantic versioning (semve
 
 ### **Available Tools:**
 
-#### 1. **GitHub Actions** (`.github/workflows/bump-version.yml`)
-Automatically bumps version when pushing to `main` or `master` branch.
+#### 1. **GitHub Actions** (`.github/workflows/release.yml`)
+Automatically bumps version and publishes to crates.io when pushing to `main` or `master` branch.
 
 **How it works:**
-- Analyzes commit messages since the last git tag
-- Determines version bump type based on Conventional Commits
-- Commits changes and creates a git tag
-- Pushes everything back to the repository
+- **Job 1 (Version Bump):**
+  - Analyzes commit messages since the last git tag
+  - Determines version bump type based on Conventional Commits
+  - Commits changes and creates a git tag
+  - Pushes everything back to the repository
+- **Job 2 (Publish):**
+  - Automatically publishes the new version to crates.io
+
+**Setup:**
+To enable automatic publishing to crates.io, add `CARGO_REGISTRY_TOKEN` to your GitHub repository secrets:
+1. Get your token from https://crates.io/settings/tokens
+2. Go to repository Settings → Secrets and variables → Actions
+3. Add new secret: `CARGO_REGISTRY_TOKEN`
 
 **Conventional Commit Format:**
 - `feat!:` or `BREAKING CHANGE:` → **MAJOR** bump (0.1.0 → 1.0.0)
@@ -75,7 +84,7 @@ git push origin main
 ```
 
 #### 2. **Manual Script** (`bump-version.sh`)
-Interactive script for manual version bumping.
+Interactive script for manual version bumping and publishing.
 
 **Usage:**
 ```bash
@@ -94,6 +103,7 @@ Interactive script for manual version bumping.
 - Shows current and new version
 - Optionally commits and tags the version
 - Provides helpful instructions for pushing
+- Shows command to publish to crates.io
 
 #### 3. **Git Hook** (`.git/hooks/pre-merge-commit`)
 Automatically bumps version when merging into `main` or `master`.
