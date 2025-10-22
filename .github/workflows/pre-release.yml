@@ -31,8 +31,8 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # Sanitize input: only allow specific patterns to prevent command injection
-          # Match /release --type=alpha or /release --type=beta exactly
-          if printf '%s' "$COMMENT_BODY" | grep -qE "^/release[[:space:]]+--type=(alpha|beta)[[:space:]]*$"; then
+          # Match /pre-release --type=alpha or /pre-release --type=beta exactly
+          if printf '%s' "$COMMENT_BODY" | grep -qE "^/pre-release[[:space:]]+--type=(alpha|beta)[[:space:]]*$"; then
             echo "should_run=true" >> $GITHUB_OUTPUT
             PRERELEASE_TYPE=$(printf '%s' "$COMMENT_BODY" | grep -oE "(alpha|beta)")
             echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
