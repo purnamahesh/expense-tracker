@@ -3,31 +3,28 @@ use std::{env::args, process::exit};
 pub mod utils;
 pub mod config;
 
-use crate::utils::{expense::Expense, file_parser::{self, append_expense}};
+use crate::utils::{expense::Expense, file_parser::append_expense};
 
 fn main() {
 
     let args:Vec<String> = args().collect();
 
-    // for arg in &args {
-    //     println!("{}", arg)
-    // }
-
     if args.len() == 1 {
-        println!("HELP")
+        println!("Usage")
     } else if args.len() == 2 {
         if args[1] == "help" {
-            println!("HELP")
+            println!("Usage")
         }
         else if args[1] == "list" {
             Expense::list_expenses();
         }
         else if args[1] == "total" {
-            Expense::expense_total();
+            Expense::expense_total()
+            .unwrap_or_else(|err| panic!("Error: {}", err));
         }
     } else {
         if args.len() % 2 != 0 {
-            println!("HELP");
+            println!("Usage");
             exit(1)
         }
         else if args[1] == "add" {
@@ -37,10 +34,8 @@ fn main() {
         else if args[1] == "filter" {
             
         } else {
-            println!("HELP")
+            println!("Usage")
         }
     }
-
-    // get_and_prcess_input();
     
 }

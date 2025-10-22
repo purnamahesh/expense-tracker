@@ -1,0 +1,86 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+
+    # Prevent infinite loops from version bump commits
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo-bump
+        run: cargo install cargo-bump
+
+      - name: Determine version bump type
+        id: semver
+        run: |
+          # Get commits since last tag or all commits if no tags exist
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s")
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
+          fi
+
+          echo "Analyzing commits:"
+          echo "$COMMITS"
+          echo ""
+
+          # Determine bump type based on conventional commits
+          if echo "$COMMITS" | grep -qE "^(BREAKING CHANGE:|.*!:)"; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+            echo "Detected MAJOR bump (breaking change)"
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+            echo "Detected MINOR bump (new feature)"
+          elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?:"; then
+            echo "bump=patch" >> $GITHUB_OUTPUT
+            echo "Detected PATCH bump (bug fix)"
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+            echo "Defaulting to PATCH bump"
+          fi
+
+      - name: Bump version in Cargo.toml
+        run: |
+          echo "Current version:"
+          grep "^version" Cargo.toml | head -1
+
+          cargo bump ${{ steps.semver.outputs.bump }}
+
+          echo "New version:"
+          grep "^version" Cargo.toml | head -1
+
+          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git tag "v$NEW_VERSION"
+
+      - name: Push changes and tags
+        run: |
+          git push origin ${{ github.ref_name }}
+          git push origin --tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,13 +12,18 @@ pub struct Expense<'a> {
     // ,datetime TODO
 }
 
+struct ExpenseList<'a> {
+    content: String,
+    expense_list: Vec<Expense<'a>>
+}
+
 impl<'a> Expense<'a> {
     pub fn new(args: &'a Vec<String>) -> Expense<'a> {
-        let (amount, description, category, tags) = Self::parse_args(args);
+        let (amount, description, category, tags) = Self::add_parse_args(args);
         Expense { amount: amount, description: description, category: category, tags: tags }
     }
 
-    fn parse_args(args: &'a Vec<String>) -> (f64, Option<&str>, Option<&str>, Vec<&str>){
+    fn add_parse_args(args: &'a Vec<String>) -> (f64, Option<&str>, Option<&str>, Vec<&str>){
         let mut description: Option<&str> = None;
         let mut amount: f64 = 0.0;
         let mut category: Option<&str> = None;
@@ -47,18 +52,20 @@ impl<'a> Expense<'a> {
             }
         }
 
-        Self::validate_expense(amount, category);
+        if ! Self::validate_expense(amount, category) {
+            exit(1)
+        }
 
         (amount, description, category, tags)
     }
 
     fn validate_expense(amount: f64, category: Option<&'a str>) -> bool {
         if amount == 0.0 {
-            println!("Amount is required!") ;
+            eprintln!("Amount is required!") ;
             return false;
         }
         else if category.is_none() || category == Some(String::from("").as_str()) {
-            println!("category is required!");
+            eprintln!("category is required!");
             return false;
         }
         return true;
