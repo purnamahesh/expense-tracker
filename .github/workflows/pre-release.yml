@@ -1,0 +1,203 @@
+name: Pre-Release
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-comment:
+    # Only run on PR comments
+    if: github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      prerelease_type: ${{ steps.check.outputs.prerelease_type }}
+      pr_number: ${{ github.event.issue.number }}
+      comment_id: ${{ github.event.comment.id }}
+
+    steps:
+      - name: Check if comment is pre-release command
+        id: check
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+
+          # Match /release --type=alpha or /release --type=beta
+          if echo "$COMMENT_BODY" | grep -qE "^/release\s+--type=(alpha|beta)\s*$"; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            PRERELEASE_TYPE=$(echo "$COMMENT_BODY" | grep -oE "(alpha|beta)")
+            echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
+            echo "Detected pre-release command: $PRERELEASE_TYPE"
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "Not a pre-release command"
+          fi
+
+  bump-and-publish:
+    needs: check-comment
+    if: needs.check-comment.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+
+    steps:
+      - name: Get PR branch
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ needs.check-comment.outputs.pr_number }}
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            core.setOutput('sha', pr.data.head.sha);
+            return pr.data.head.ref;
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo-bump
+        run: cargo install cargo-bump
+
+      - name: Bump to pre-release version
+        id: version
+        run: |
+          echo "Current version:"
+          CURRENT_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "$CURRENT_VERSION"
+
+          PRERELEASE_TYPE="${{ needs.check-comment.outputs.prerelease_type }}"
+
+          # Set suffix based on type (a for alpha, b for beta)
+          if [ "$PRERELEASE_TYPE" = "alpha" ]; then
+            SUFFIX="a"
+          else
+            SUFFIX="b"
+          fi
+
+          # Check if already a pre-release version with same type
+          if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
+            # Extract base version and current pre-release number
+            BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
+            CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
+            NEW_NUM=$((CURRENT_NUM + 1))
+            NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
+          else
+            # Check if it's a different pre-release type (switch from a to b or vice versa)
+            if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
+              # Remove old pre-release suffix
+              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
+              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+            else
+              # Not a pre-release, bump patch and add suffix
+              cargo bump patch
+              BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+            fi
+          fi
+
+          # Update Cargo.toml with pre-release version
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+
+          echo "New version: $NEW_VERSION"
+
+          # Update Cargo.lock
+          cargo check --quiet
+
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git tag "v$NEW_VERSION"
+
+      - name: Push changes and tags
+        run: |
+          git push origin ${{ steps.pr.outputs.ref }}
+          git push origin --tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  comment-and-react:
+    needs: [check-comment, bump-and-publish]
+    if: needs.check-comment.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add comment to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const newVersion = '${{ needs.bump-and-publish.outputs.new_version }}';
+            const prereleaseType = '${{ needs.check-comment.outputs.prerelease_type }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              body: `## 🚀 Pre-release Published\n\n**Version:** \`${newVersion}\`\n**Type:** ${prereleaseType}\n\nSuccessfully published to [crates.io](https://crates.io/crates/${{ github.event.repository.name }})!\n\n### Install this version:\n\`\`\`bash\ncargo install ${{ github.event.repository.name }} --version ${newVersion}\n\`\`\``
+            });
+
+      - name: Add thumbs up reaction to trigger comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ needs.check-comment.outputs.comment_id }},
+              content: '+1'
+            });
+
+  handle-failure:
+    needs: [check-comment, bump-and-publish]
+    if: failure() && needs.check-comment.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add failure comment to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prereleaseType = '${{ needs.check-comment.outputs.prerelease_type }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              body: `## ❌ Pre-release Failed\n\n**Type:** ${prereleaseType}\n\nFailed to publish pre-release. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            });
+
+      - name: Add thumbs down reaction to trigger comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ needs.check-comment.outputs.comment_id }},
+              content: '-1'
+            });

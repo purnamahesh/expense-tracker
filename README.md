@@ -105,7 +105,45 @@ Interactive script for manual version bumping and publishing.
 - Provides helpful instructions for pushing
 - Shows command to publish to crates.io
 
-#### 3. **Git Hook** (`.git/hooks/pre-merge-commit`)
+#### 3. **Pre-Release Workflow** (`.github/workflows/pre-release.yml`)
+Publish alpha/beta versions directly from pull requests using PR comments.
+
+**How it works:**
+- Triggered by commenting on a PR with `/release --type=alpha` or `/release --type=beta`
+- Bumps version with pre-release suffix (e.g., `0.1.1a0`, `1.2.3b2`)
+- Publishes to crates.io
+- Adds a comment to the PR with version info
+- Reacts with 👍 on success or 👎 on failure
+
+**Usage:**
+1. Open a pull request
+2. Add a comment: `/release --type=alpha` or `/release --type=beta`
+3. Workflow automatically:
+   - Bumps version with suffix (e.g., `0.1.0` → `0.1.1a0` or `0.1.1a0` → `0.1.1a1`)
+   - Updates Cargo.toml and Cargo.lock
+   - Commits and tags the version
+   - Publishes to crates.io
+   - Reports back in PR comments
+
+**Examples:**
+```bash
+# In a PR comment:
+/release --type=alpha    # Creates version like 0.1.1a0, 0.1.1a1, etc.
+/release --type=beta     # Creates version like 0.1.1b0, 0.1.1b1, etc.
+```
+
+**Version Format:**
+- `1.0.0` → `/release --type=alpha` → `1.0.1a0`
+- `1.0.1a0` → `/release --type=alpha` → `1.0.1a1`
+- `1.0.1a1` → `/release --type=beta` → `1.0.1b0` (switches type)
+- `1.0.1b0` → `/release --type=beta` → `1.0.1b1`
+
+**Requirements:**
+- Must be run from a pull request
+- Requires `CARGO_REGISTRY_TOKEN` secret
+- Comment must be exactly `/release --type=alpha` or `/release --type=beta`
+
+#### 4. **Git Hook** (`.git/hooks/pre-merge-commit`)
 Automatically bumps version when merging into `main` or `master`.
 
 **How it works:**
