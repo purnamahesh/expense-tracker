@@ -6,6 +6,10 @@ on:
       - main
       - master
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   bump-version:
     runs-on: ubuntu-latest
@@ -23,13 +27,64 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check for Rust file changes
+        id: rust_changes
+        run: |
+          # Get commits since last tag or all commits if no tags exist
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            # No tags exist, check if any .rs files exist
+            RS_FILES=$(find . -name "*.rs" -type f | wc -l)
+            if [ "$RS_FILES" -gt 0 ]; then
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "Found Rust files in repository"
+            else
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "No Rust files found"
+            fi
+          else
+            # Check if any .rs files changed since last tag
+            CHANGED_RS_FILES=$(git diff --name-only ${LAST_TAG}..HEAD | grep '\.rs$' || true)
+
+            if [ -n "$CHANGED_RS_FILES" ]; then
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "Rust files changed since ${LAST_TAG}:"
+              echo "$CHANGED_RS_FILES"
+            else
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "No Rust files changed since ${LAST_TAG}"
+            fi
+          fi
+
+      - name: Skip release message
+        if: steps.rust_changes.outputs.has_changes == 'false'
+        run: |
+          echo "⏭️ Skipping release - no Rust file changes detected"
+          exit 0
+
       - name: Set up Rust
+        if: steps.rust_changes.outputs.has_changes == 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Cache cargo-bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bump
+          key: ${{ runner.os }}-cargo-bump-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Install cargo-bump
-        run: cargo install cargo-bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        run: |
+          if ! command -v cargo-bump &> /dev/null; then
+            cargo install cargo-bump
+          else
+            echo "cargo-bump already installed"
+          fi
 
       - name: Determine version bump type
+        if: steps.rust_changes.outputs.has_changes == 'true'
         id: semver
         run: |
           # Get commits since last tag or all commits if no tags exist
@@ -61,6 +116,7 @@ jobs:
           fi
 
       - name: Bump version in Cargo.toml
+        if: steps.rust_changes.outputs.has_changes == 'true'
         id: version
         run: |
           echo "Current version:"
@@ -72,10 +128,16 @@ jobs:
           grep "^version" Cargo.toml | head -1
 
           NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+
+          # Update Cargo.lock with new version
+          PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
+          cargo update -p "$PACKAGE_NAME" --quiet
+
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Commit version bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -84,6 +146,7 @@ jobs:
           git tag "v$NEW_VERSION"
 
       - name: Push changes and tags
+        if: steps.rust_changes.outputs.has_changes == 'true'
         run: |
           git push origin ${{ github.ref_name }}
           git push origin --tags
@@ -93,6 +156,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: bump-version
+    if: needs.bump-version.outputs.new_version != ''
 
     steps:
       - name: Checkout code
@@ -106,7 +170,12 @@ jobs:
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Verify package before publish
+        run: cargo publish --dry-run
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
       - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

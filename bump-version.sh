@@ -52,6 +52,11 @@ cargo bump $BUMP_TYPE
 # Get new version
 NEW_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 
+# Update Cargo.lock with new version
+echo -e "${YELLOW}Updating Cargo.lock...${NC}"
+PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
+cargo update -p "$PACKAGE_NAME" --quiet 2>/dev/null || true
+
 echo ""
 echo -e "${GREEN}✓ Version bumped successfully!${NC}"
 echo -e "  $CURRENT_VERSION → $NEW_VERSION"

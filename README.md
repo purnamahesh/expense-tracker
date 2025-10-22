@@ -48,6 +48,9 @@ This project includes automated version bumping using semantic versioning (semve
 Automatically bumps version and publishes to crates.io when pushing to `main` or `master` branch.
 
 **How it works:**
+- **Check for Changes:**
+  - Skips release if no `.rs` files changed since last tag
+  - Displays skip message in workflow logs
 - **Job 1 (Version Bump):**
   - Analyzes commit messages since the last git tag
   - Determines version bump type based on Conventional Commits
@@ -110,6 +113,9 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 
 **How it works:**
 - Triggered by commenting on a PR with `/release --type=alpha` or `/release --type=beta`
+- **Check for Changes:**
+  - Skips pre-release if no `.rs` files changed in the PR
+  - Adds a skip message comment to the PR
 - Bumps version with pre-release suffix (e.g., `0.1.1a0`, `1.2.3b2`)
 - Publishes to crates.io
 - Adds a comment to the PR with version info
