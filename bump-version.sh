@@ -96,6 +96,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo "Next steps:"
   echo "  git push origin $(git rev-parse --abbrev-ref HEAD)"
   echo "  git push origin --tags"
+  echo ""
+  echo "To publish to crates.io:"
+  echo "  cargo publish"
 else
   echo ""
   echo "Version bumped but not committed."
@@ -103,6 +106,9 @@ else
   echo "  git add Cargo.toml Cargo.lock"
   echo "  git commit -m 'chore: bump version to $NEW_VERSION'"
   echo "  git tag v$NEW_VERSION"
+  echo ""
+  echo "To publish to crates.io:"
+  echo "  cargo publish"
 fi
 
 echo ""
