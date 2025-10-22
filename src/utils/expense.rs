@@ -81,6 +81,22 @@ impl<'a> Expense<'a> {
             );
         }
     }
+
+    pub fn expense_total() -> Result<(), Box<dyn std::error::Error>> {
+
+        let content = read_file_content(None);
+
+        let mut total:f64 = 0.0;
+
+        for line in content.trim().split('\n') {
+            let x = line.split('|').collect::<Vec<&str>>(); 
+            total += x[1].trim().parse::<f64>()?;
+        }
+
+        println!("Total: {}", total);
+
+        Ok(())
+    }
  
     
 }

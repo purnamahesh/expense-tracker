@@ -23,7 +23,7 @@ fn main() {
             Expense::list_expenses();
         }
         else if args[1] == "total" {
-            
+            Expense::expense_total();
         }
     } else {
         if args.len() % 2 != 0 {
