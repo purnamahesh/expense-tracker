@@ -9,6 +9,10 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: pre-release-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   check-comment:
     # Only run on PR comments
@@ -23,13 +27,14 @@ jobs:
     steps:
       - name: Check if comment is pre-release command
         id: check
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          COMMENT_BODY="${{ github.event.comment.body }}"
-
-          # Match /release --type=alpha or /release --type=beta
-          if echo "$COMMENT_BODY" | grep -qE "^/release\s+--type=(alpha|beta)\s*$"; then
+          # Sanitize input: only allow specific patterns to prevent command injection
+          # Match /pre-release --type=alpha or /pre-release --type=beta exactly
+          if printf '%s' "$COMMENT_BODY" | grep -qE "^/pre-release[[:space:]]+--type=(alpha|beta)[[:space:]]*$"; then
             echo "should_run=true" >> $GITHUB_OUTPUT
-            PRERELEASE_TYPE=$(echo "$COMMENT_BODY" | grep -oE "(alpha|beta)")
+            PRERELEASE_TYPE=$(printf '%s' "$COMMENT_BODY" | grep -oE "(alpha|beta)")
             echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
             echo "Detected pre-release command: $PRERELEASE_TYPE"
           else
@@ -67,13 +72,65 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check for Rust file changes in PR
+        id: rust_changes
+        run: |
+          # Get the base branch (main or master)
+          BASE_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d ":" -f 2 | xargs)
+
+          # Fetch the base branch
+          git fetch origin $BASE_BRANCH
+
+          # Check if any .rs files changed in this PR
+          CHANGED_RS_FILES=$(git diff --name-only origin/$BASE_BRANCH...HEAD | grep '\.rs$' || true)
+
+          if [ -n "$CHANGED_RS_FILES" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Rust files changed in this PR:"
+            echo "$CHANGED_RS_FILES"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No Rust files changed in this PR"
+          fi
+
+      - name: Skip pre-release comment
+        if: steps.rust_changes.outputs.has_changes == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              body: '⏭️ **Skipping pre-release** - No Rust file changes detected in this PR'
+            });
+
+      - name: Exit if no changes
+        if: steps.rust_changes.outputs.has_changes == 'false'
+        run: exit 0
+
       - name: Set up Rust
+        if: steps.rust_changes.outputs.has_changes == 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Cache cargo-bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bump
+          key: ${{ runner.os }}-cargo-bump-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Install cargo-bump
-        run: cargo install cargo-bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        run: |
+          if ! command -v cargo-bump &> /dev/null; then
+            cargo install cargo-bump
+          else
+            echo "cargo-bump already installed"
+          fi
 
       - name: Bump to pre-release version
+        if: steps.rust_changes.outputs.has_changes == 'true'
         id: version
         run: |
           echo "Current version:"
@@ -110,18 +167,26 @@ jobs:
             fi
           fi
 
-          # Update Cargo.toml with pre-release version
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+          # Update Cargo.toml with pre-release version (portable sed)
+          if [ "$(uname)" = "Darwin" ]; then
+            # macOS requires explicit backup extension
+            sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+          else
+            # Linux doesn't require it
+            sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+          fi
 
           echo "New version: $NEW_VERSION"
 
-          # Update Cargo.lock
-          cargo check --quiet
+          # Update Cargo.lock with new version
+          PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
+          cargo update -p "$PACKAGE_NAME" --quiet
 
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Commit version bump
+        if: steps.rust_changes.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -130,20 +195,28 @@ jobs:
           git tag "v$NEW_VERSION"
 
       - name: Push changes and tags
+        if: steps.rust_changes.outputs.has_changes == 'true'
         run: |
           git push origin ${{ steps.pr.outputs.ref }}
           git push origin --tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify package before publish
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        run: cargo publish --dry-run
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
       - name: Publish to crates.io
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        if: steps.rust_changes.outputs.has_changes == 'true'
+        run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   comment-and-react:
     needs: [check-comment, bump-and-publish]
-    if: needs.check-comment.outputs.should_run == 'true'
+    if: needs.check-comment.outputs.should_run == 'true' && needs.bump-and-publish.outputs.new_version != ''
     runs-on: ubuntu-latest
 
     steps:
