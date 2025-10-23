@@ -8,6 +8,28 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip all tests (emergency override)'
+        required: false
+        type: boolean
+        default: false
+      run_coverage:
+        description: 'Run code coverage'
+        required: false
+        type: boolean
+        default: true
+      test_os:
+        description: 'Test operating systems'
+        required: false
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - ubuntu-only
+          - ubuntu-macos
+          - ubuntu-windows
 
 permissions:
   contents: read
@@ -19,7 +41,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-config:
+    runs-on: ubuntu-latest
+    outputs:
+      tests_enabled: ${{ steps.config.outputs.tests_enabled }}
+      skip_reason: ${{ steps.config.outputs.skip_reason }}
+
+    steps:
+      - name: Check if tests should run
+        id: config
+        env:
+          # Repository variable to globally disable tests
+          DISABLE_TESTS: ${{ vars.DISABLE_TESTS }}
+        run: |
+          # Check manual override (workflow_dispatch)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.skip_tests }}" = "true" ]; then
+            echo "tests_enabled=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=Manual override: Tests skipped via workflow dispatch" >> $GITHUB_OUTPUT
+            echo "⏭️ Tests disabled: Manual workflow dispatch override"
+            exit 0
+          fi
+
+          # Check repository variable
+          if [ "$DISABLE_TESTS" = "true" ]; then
+            echo "tests_enabled=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=Tests disabled via repository variable DISABLE_TESTS" >> $GITHUB_OUTPUT
+            echo "⏭️ Tests disabled: Repository variable DISABLE_TESTS=true"
+            exit 0
+          fi
+
+          # Check for commit message override
+          if echo "${{ github.event.head_commit.message }}" | grep -qE "\[skip tests\]|\[no tests\]"; then
+            echo "tests_enabled=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=Tests skipped via commit message [skip tests]" >> $GITHUB_OUTPUT
+            echo "⏭️ Tests disabled: Commit message contains [skip tests]"
+            exit 0
+          fi
+
+          # Tests are enabled
+          echo "tests_enabled=true" >> $GITHUB_OUTPUT
+          echo "skip_reason=" >> $GITHUB_OUTPUT
+          echo "✅ Tests enabled"
+
   check-changes:
+    needs: check-config
+    if: needs.check-config.outputs.tests_enabled == 'true'
     runs-on: ubuntu-latest
     outputs:
       has_rust_changes: ${{ steps.rust_changes.outputs.has_changes }}
@@ -59,14 +125,21 @@ jobs:
           fi
 
   test:
-    needs: check-changes
-    if: needs.check-changes.outputs.has_rust_changes == 'true'
+    needs: [check-config, check-changes]
+    if: |
+      needs.check-config.outputs.tests_enabled == 'true' &&
+      needs.check-changes.outputs.has_rust_changes == 'true'
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{
+          (github.event_name == 'workflow_dispatch' && inputs.test_os == 'ubuntu-only' && fromJSON('["ubuntu-latest"]')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.test_os == 'ubuntu-macos' && fromJSON('["ubuntu-latest", "macos-latest"]')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.test_os == 'ubuntu-windows' && fromJSON('["ubuntu-latest", "windows-latest"]')) ||
+          fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]')
+        }}
         rust: [stable, beta]
         exclude:
           # Skip beta on macOS and Windows to save CI time
@@ -123,8 +196,11 @@ jobs:
         run: cargo test --all-features --verbose
 
   coverage:
-    needs: check-changes
-    if: needs.check-changes.outputs.has_rust_changes == 'true'
+    needs: [check-config, check-changes]
+    if: |
+      needs.check-config.outputs.tests_enabled == 'true' &&
+      needs.check-changes.outputs.has_rust_changes == 'true' &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_coverage == true)
     runs-on: ubuntu-latest
 
     steps:
@@ -152,7 +228,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   test-summary:
-    needs: [check-changes, test]
+    needs: [check-config, check-changes, test]
     if: always()
     runs-on: ubuntu-latest
     # This job is required for branch protection rules
@@ -162,7 +238,11 @@ jobs:
       - name: Determine overall status
         id: status
         run: |
-          if [ "${{ needs.check-changes.outputs.has_rust_changes }}" != "true" ]; then
+          # Check if tests were disabled
+          if [ "${{ needs.check-config.outputs.tests_enabled }}" != "true" ]; then
+            echo "result=disabled" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Tests disabled: ${{ needs.check-config.outputs.skip_reason }}" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.check-changes.outputs.has_rust_changes }}" != "true" ]; then
             echo "result=skipped" >> $GITHUB_OUTPUT
             echo "message=⏭️ Tests skipped - no Rust file changes detected" >> $GITHUB_OUTPUT
           elif [ "${{ needs.test.result }}" = "success" ]; then
@@ -197,7 +277,14 @@ jobs:
             // Build comment body
             let body = '## 🧪 Test Results\n\n';
 
-            if (status === 'skipped') {
+            if (status === 'disabled') {
+              body += '⚠️ **Tests Disabled**\n\n';
+              body += message + '\n\n';
+              body += '**To re-enable tests:**\n';
+              body += '- Remove `[skip tests]` from commit messages\n';
+              body += '- Set repository variable `DISABLE_TESTS` to `false` (if set)\n';
+              body += '- Use workflow dispatch without "Skip all tests" option\n';
+            } else if (status === 'skipped') {
               body += '⏭️ **Tests Skipped**\n\n';
               body += 'No Rust file changes detected in this PR.\n';
             } else if (status === 'success') {

@@ -110,6 +110,57 @@ To require tests to pass before merging:
 4. Select "test-summary" from the list
 5. Enable "Require branches to be up to date before merging" (recommended)
 
+---
+
+### **Temporarily Disable Tests**
+
+Multiple ways to skip tests when needed:
+
+#### **1. Commit Message Override** (Per-commit)
+Add `[skip tests]` or `[no tests]` to your commit message:
+```bash
+git commit -m "docs: update README [skip tests]"
+git push
+```
+Tests will be skipped for that specific commit.
+
+#### **2. Workflow Dispatch** (Manual trigger)
+Manually run the workflow with custom options:
+1. Go to Actions → Test workflow
+2. Click "Run workflow"
+3. Select options:
+   - ✅ **Skip all tests** - Emergency override
+   - **Run code coverage** - Enable/disable coverage
+   - **Test operating systems** - Choose which OSes to test:
+     - `all` - Ubuntu, macOS, Windows (default)
+     - `ubuntu-only` - Ubuntu only (faster)
+     - `ubuntu-macos` - Ubuntu + macOS
+     - `ubuntu-windows` - Ubuntu + Windows
+
+**Use cases:**
+- Quick iteration during development
+- CI maintenance/debugging
+- Save CI minutes
+
+#### **3. Repository Variable** (Global disable)
+Disable tests for all pushes/PRs (emergency use):
+1. Go to repository Settings → Secrets and variables → Actions → Variables
+2. Click "New repository variable"
+3. Name: `DISABLE_TESTS`
+4. Value: `true`
+5. Click "Add variable"
+
+Tests will be disabled globally until you:
+- Delete the variable, OR
+- Change value to `false`
+
+**⚠️ Warning:** This bypasses all tests including PR checks. Use only in emergencies.
+
+**Re-enable:**
+1. Go to repository Settings → Secrets and variables → Actions → Variables
+2. Find `DISABLE_TESTS`
+3. Click "Delete" or change value to `false`
+
 **Matrix Strategy:**
 | OS | Rust Stable | Rust Beta |
 |----|-------------|-----------|
