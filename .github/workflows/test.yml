@@ -3,7 +3,9 @@ name: Test
 on:
   push:
     branches:
-      - '**'  # Run on all branches
+      - 'feature/**'
+      - 'fix/**'
+      - 'patch/**'
   pull_request:
     branches:
       - main
