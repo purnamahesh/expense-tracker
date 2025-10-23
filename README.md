@@ -86,8 +86,82 @@ git push origin main
 # → Version bumped from 0.2.1 to 1.0.0
 ```
 
-#### 2. **Manual Script** (`bump-version.sh`)
-Interactive script for manual version bumping and publishing.
+#### 2. **Release Script** (`release.sh`)
+Interactive script that replicates the full GitHub Actions release workflow locally.
+
+**Usage:**
+```bash
+./release.sh
+```
+
+**Features:**
+- ✓ Checks all prerequisites (cargo-bump, git, CARGO_REGISTRY_TOKEN, etc.)
+- ✓ Detects Rust file changes since last tag
+- ✓ Analyzes commits for automatic version bump type (major/minor/patch)
+- ✓ Updates both Cargo.toml and Cargo.lock
+- ✓ Interactive y/n prompts for each major action:
+  - Version bump
+  - Commit and tag
+  - Push to remote
+  - Publish to crates.io (with dry-run first)
+- ✓ Color-coded output for better readability
+
+**Example session:**
+```bash
+$ ./release.sh
+========================================
+  Release Script - Local Workflow
+========================================
+
+Checking prerequisites...
+✓ Cargo.toml found
+✓ Git repository
+✓ On main branch
+✓ No uncommitted changes
+✓ cargo-bump installed
+✓ CARGO_REGISTRY_TOKEN is set
+
+✓ Rust files changed since v0.1.3:
+  src/main.rs
+  src/utils/expense.rs
+
+Analyzing commits for version bump type...
+Recent commits:
+  feat: add new expense filtering
+  fix: correct date parsing
+
+Detected: MINOR bump (new feature)
+
+Proceed with minor version bump? (y/N):
+```
+
+#### 3. **Pre-Release Script** (`pre-release.sh`)
+Interactive script that replicates the GitHub Actions pre-release workflow locally.
+
+**Usage:**
+```bash
+./pre-release.sh [alpha|beta]
+```
+
+**Examples:**
+```bash
+./pre-release.sh alpha   # Create alpha pre-release (e.g., 1.0.1a0)
+./pre-release.sh beta    # Create beta pre-release (e.g., 1.0.1b0)
+```
+
+**Features:**
+- ✓ Checks all prerequisites
+- ✓ Detects if on feature branch vs base branch
+- ✓ Checks for Rust file changes compared to base branch
+- ✓ Smart version calculation:
+  - Increments if same type (1.0.1a0 → 1.0.1a1)
+  - Resets if switching type (1.0.1a2 → 1.0.1b0)
+  - Bumps patch if stable (1.0.0 → 1.0.1a0)
+- ✓ Interactive y/n prompts for each action
+- ✓ Portable (works on macOS and Linux)
+
+#### 4. **Manual Version Bump Script** (`bump-version.sh`)
+Simple interactive script for quick version bumping.
 
 **Usage:**
 ```bash
@@ -104,11 +178,12 @@ Interactive script for manual version bumping and publishing.
 **Features:**
 - Validates bump type
 - Shows current and new version
+- Updates Cargo.lock
 - Optionally commits and tags the version
 - Provides helpful instructions for pushing
 - Shows command to publish to crates.io
 
-#### 3. **Pre-Release Workflow** (`.github/workflows/pre-release.yml`)
+#### 5. **Pre-Release Workflow** (`.github/workflows/pre-release.yml`)
 Publish alpha/beta versions directly from pull requests using PR comments.
 
 **How it works:**
@@ -149,7 +224,7 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 - Requires `CARGO_REGISTRY_TOKEN` secret
 - Comment must be exactly `/pre-release --type=alpha` or `/pre-release --type=beta`
 
-#### 4. **Git Hook** (`.git/hooks/pre-merge-commit`)
+#### 6. **Git Hook** (`.git/hooks/pre-merge-commit`)
 Automatically bumps version when merging into `main` or `master`.
 
 **How it works:**
