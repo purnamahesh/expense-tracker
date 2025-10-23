@@ -1,0 +1,266 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - '**'  # Run on all branches
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_rust_changes: ${{ steps.rust_changes.outputs.has_changes }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Rust file changes
+        id: rust_changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PRs, check changes between base and head
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep '\.rs$' || true)
+          else
+            # For pushes, check changes in the commit
+            if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+              # New branch, check all .rs files
+              CHANGED_FILES=$(find . -name "*.rs" -type f | wc -l)
+              if [ "$CHANGED_FILES" -gt 0 ]; then
+                CHANGED_FILES="found"
+              fi
+            else
+              # Check changes in the push
+              CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '\.rs$' || true)
+            fi
+          fi
+
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Rust files changed - will run tests"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No Rust files changed - skipping tests"
+          fi
+
+  test:
+    needs: check-changes
+    if: needs.check-changes.outputs.has_rust_changes == 'true'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
+        exclude:
+          # Skip beta on macOS and Windows to save CI time
+          - os: macos-latest
+            rust: beta
+          - os: windows-latest
+            rust: beta
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust ${{ matrix.rust }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        if: matrix.rust == 'stable'
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run unit tests
+        run: cargo test --lib --verbose
+
+      - name: Run integration tests
+        run: cargo test --test '*' --verbose
+
+      - name: Run doc tests
+        run: cargo test --doc --verbose
+
+      - name: Run all tests with all features
+        run: cargo test --all-features --verbose
+
+  coverage:
+    needs: check-changes
+    if: needs.check-changes.outputs.has_rust_changes == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  test-summary:
+    needs: [check-changes, test]
+    if: always()
+    runs-on: ubuntu-latest
+    # This job is required for branch protection rules
+    # Always runs to report status even if tests are skipped
+
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [ "${{ needs.check-changes.outputs.has_rust_changes }}" != "true" ]; then
+            echo "result=skipped" >> $GITHUB_OUTPUT
+            echo "message=⏭️ Tests skipped - no Rust file changes detected" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.test.result }}" = "success" ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "message=✅ All tests passed successfully!" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.test.result }}" = "failure" ]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "message=❌ Tests failed" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.test.result }}" = "cancelled" ]; then
+            echo "result=cancelled" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Tests were cancelled" >> $GITHUB_OUTPUT
+          else
+            echo "result=unknown" >> $GITHUB_OUTPUT
+            echo "message=⚠️ Tests status: ${{ needs.test.result }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.status.outputs.result }}';
+            const message = '${{ steps.status.outputs.message }}';
+
+            // Get test results details
+            const testResults = {
+              hasChanges: '${{ needs.check-changes.outputs.has_rust_changes }}',
+              testResult: '${{ needs.test.result }}',
+              coverageResult: '${{ needs.coverage.result }}'
+            };
+
+            // Build comment body
+            let body = '## 🧪 Test Results\n\n';
+
+            if (status === 'skipped') {
+              body += '⏭️ **Tests Skipped**\n\n';
+              body += 'No Rust file changes detected in this PR.\n';
+            } else if (status === 'success') {
+              body += '✅ **All Tests Passed**\n\n';
+              body += '| Check | Status |\n';
+              body += '|-------|--------|\n';
+              body += '| Code Formatting | ✅ Passed |\n';
+              body += '| Clippy Lints | ✅ Passed |\n';
+              body += '| Unit Tests | ✅ Passed |\n';
+              body += '| Integration Tests | ✅ Passed |\n';
+              body += '| Doc Tests | ✅ Passed |\n';
+              if (testResults.coverageResult === 'success') {
+                body += '| Code Coverage | ✅ Generated |\n';
+              }
+              body += '\n**Tested on:** Ubuntu (stable, beta), macOS (stable), Windows (stable)\n';
+            } else if (status === 'failure') {
+              body += '❌ **Tests Failed**\n\n';
+              body += 'Some tests did not pass. Please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\n';
+              body += '**Common fixes:**\n';
+              body += '- Run `cargo fmt` to fix formatting issues\n';
+              body += '- Run `cargo clippy --fix` to fix linting issues\n';
+              body += '- Run `cargo test` locally to reproduce failures\n';
+            } else if (status === 'cancelled') {
+              body += '⚠️ **Tests Cancelled**\n\n';
+              body += 'The test workflow was cancelled.\n';
+            } else {
+              body += `⚠️ **Unknown Status**\n\nTests status: ${testResults.testResult}\n`;
+            }
+
+            body += `\n---\n*Workflow: [${context.workflow}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## 🧪 Test Results')
+            );
+
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Test Summary
+        run: |
+          echo "${{ steps.status.outputs.message }}"
+          if [ "${{ steps.status.outputs.result }}" = "failure" ] || [ "${{ steps.status.outputs.result }}" = "cancelled" ]; then
+            exit 1
+          fi

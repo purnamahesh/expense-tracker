@@ -38,6 +38,184 @@ Would you like some tips on how to structure the code or which concepts to focus
 
 ---
 
+## **Testing**
+
+This project includes comprehensive testing infrastructure for unit tests, integration tests, and code coverage.
+
+### **GitHub Actions Workflow** (`.github/workflows/test.yml`)
+
+**Triggers:**
+- Push to any branch (if Rust files changed)
+- Pull requests to main/master
+
+**Features:**
+- ✓ **Smart change detection** - Only runs if `.rs` files changed
+- ✓ **Multi-OS testing** - Ubuntu, macOS, Windows
+- ✓ **Multi-Rust version** - Stable and Beta
+- ✓ **Comprehensive checks**:
+  - Code formatting (`cargo fmt`)
+  - Linting (`cargo clippy`)
+  - Unit tests
+  - Integration tests
+  - Doc tests
+  - All features tests
+- ✓ **Code coverage** - Generates coverage report with cargo-llvm-cov
+- ✓ **Dependency caching** - Faster CI runs
+- ✓ **Required status check** - Blocks PR merge if tests fail
+- ✓ **PR comments** - Posts detailed test results as PR comments
+- ✓ **Test summary** - Clear pass/fail status
+
+**PR Comments:**
+
+The workflow automatically posts test results to PRs:
+
+**Success:**
+```markdown
+## 🧪 Test Results
+
+✅ **All Tests Passed**
+
+| Check | Status |
+|-------|--------|
+| Code Formatting | ✅ Passed |
+| Clippy Lints | ✅ Passed |
+| Unit Tests | ✅ Passed |
+| Integration Tests | ✅ Passed |
+| Doc Tests | ✅ Passed |
+| Code Coverage | ✅ Generated |
+
+**Tested on:** Ubuntu (stable, beta), macOS (stable), Windows (stable)
+```
+
+**Failure:**
+```markdown
+## 🧪 Test Results
+
+❌ **Tests Failed**
+
+Some tests did not pass. Please check the workflow run for details.
+
+**Common fixes:**
+- Run `cargo fmt` to fix formatting issues
+- Run `cargo clippy --fix` to fix linting issues
+- Run `cargo test` locally to reproduce failures
+```
+
+**Branch Protection:**
+
+To require tests to pass before merging:
+1. Go to repository Settings → Branches
+2. Add branch protection rule for `main`/`master`
+3. Enable "Require status checks to pass before merging"
+4. Select "test-summary" from the list
+5. Enable "Require branches to be up to date before merging" (recommended)
+
+**Matrix Strategy:**
+| OS | Rust Stable | Rust Beta |
+|----|-------------|-----------|
+| Ubuntu | ✅ | ✅ |
+| macOS | ✅ | ⏭️ |
+| Windows | ✅ | ⏭️ |
+
+### **Local Test Script** (`test.sh`)
+
+Interactive script for running tests locally with various options.
+
+**Usage:**
+```bash
+./test.sh [OPTIONS]
+```
+
+**Options:**
+- `--unit` - Run only unit tests
+- `--integration` - Run only integration tests
+- `--doc` - Run only doc tests
+- `--coverage` - Generate code coverage report
+- `--watch` - Run tests in watch mode (auto-rerun on changes)
+- `--verbose` - Show verbose output
+- `--release` - Run tests in release mode
+- `--help` - Show help message
+
+**Examples:**
+```bash
+# Run all tests (default)
+./test.sh
+
+# Run only unit tests
+./test.sh --unit
+
+# Run tests in watch mode (auto-rerun on file changes)
+./test.sh --watch --unit
+
+# Generate coverage report
+./test.sh --coverage
+
+# Run integration tests with verbose output
+./test.sh --integration --verbose
+
+# Run tests in release mode
+./test.sh --release
+```
+
+**Features:**
+- ✓ Prerequisite checks (cargo, cargo-watch, cargo-llvm-cov)
+- ✓ Offers to install missing tools
+- ✓ Shows uncommitted Rust file changes
+- ✓ Runs formatting check (`cargo fmt`)
+- ✓ Runs clippy linter
+- ✓ Builds project before tests
+- ✓ Color-coded output
+- ✓ Clear pass/fail summary
+
+**Example Output:**
+```bash
+$ ./test.sh --unit
+========================================
+  Test Suite - Local Execution
+========================================
+
+Checking prerequisites...
+✓ Cargo.toml found
+✓ cargo installed
+
+ℹ Uncommitted Rust file changes detected:
+  src/main.rs
+  src/utils/expense.rs
+
+Checking code formatting...
+✓ Code formatting is correct
+
+Running clippy (linter)...
+✓ Clippy checks passed
+
+Building project...
+✓ Build successful
+
+Running Unit Tests...
+Command: cargo test --lib
+
+✓ Unit Tests passed
+
+========================================
+  ✓ All tests passed!
+========================================
+```
+
+**Coverage Report:**
+```bash
+# Generate and view coverage
+./test.sh --coverage
+
+# Generate HTML report
+cargo llvm-cov --all-features --workspace --html
+open target/llvm-cov/html/index.html
+
+# Generate lcov.info for external tools (Codecov, Coveralls)
+cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+```
+
+---
+
 ## **Version Management**
 
 This project includes automated version bumping using semantic versioning (semver).
