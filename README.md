@@ -34,7 +34,114 @@ This project is perfect because it's:
 - Covers fundamental Rust concepts
 - Can be extended with more features as you learn (like date tracking, budgets, statistics)
 
-Would you like some tips on how to structure the code or which concepts to focus on first?
+---
+
+## **Getting Started**
+
+### **1. Clone the Repository**
+```bash
+git clone <repository-url>
+cd expense-tracker
+```
+
+### **2. Build the Project**
+```bash
+cargo build --release
+```
+
+### **3. Install Git Hooks**
+This project uses git hooks to enforce commit message standards and automate version management:
+```bash
+./install-hooks.sh
+```
+
+This installs two hooks:
+
+#### **commit-msg Hook**
+Validates commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) format.
+
+**What it does:**
+- ✓ Enforces commit message prefix (feat:, fix:, chore:, docs:, etc.)
+- ✓ Suggests adding `[skip tests]` suffix if not present
+- ✓ Blocks commits with invalid format
+- ✓ Shows helpful error messages with examples
+
+#### **pre-merge-commit Hook**
+Automatically bumps version when merging into main/master branch.
+
+**What it does:**
+- ✓ Detects merge commits to main/master
+- ✓ Analyzes merged commits for version bump type
+- ✓ Automatically updates Cargo.toml and Cargo.lock
+- ✓ Stages version changes with the merge commit
+- ✓ Uses conventional commit format to determine bump type:
+  - `feat!:`, `BREAKING CHANGE` → **MAJOR** bump (1.0.0 → 2.0.0)
+  - `feat:` → **MINOR** bump (1.0.0 → 1.1.0)
+  - `fix:`, `patch:` → **PATCH** bump (1.0.0 → 1.0.1)
+
+**Requirement:** Install `cargo-bump` for automatic version bumping:
+```bash
+cargo install cargo-bump
+```
+
+**Valid commit message format:**
+```bash
+<type>: <description>
+```
+
+**Valid prefixes:**
+- `feat:` - New feature (MINOR version bump)
+- `feat!:` - Breaking change feature (MAJOR version bump)
+- `fix:` - Bug fix (PATCH version bump)
+- `patch:` - Small patch (PATCH version bump)
+- `chore:` - Routine tasks, maintenance
+- `docs:` - Documentation changes
+- `style:` - Code style changes (formatting, etc.)
+- `refactor:` - Code refactoring
+- `perf:` - Performance improvements
+- `test:` - Adding or updating tests
+- `build:` - Build system or dependency changes
+- `ci:` - CI/CD configuration changes
+- `revert:` - Reverting a previous commit
+
+Add `!` before `:` for breaking changes (e.g., `feat!:`, `fix!:`)
+
+**Examples:**
+```bash
+✅ git commit -m "feat: add user authentication"
+✅ git commit -m "fix: correct date parsing [skip tests]"
+✅ git commit -m "docs: update README [skip tests]"
+✅ git commit -m "feat!: redesign API (breaking change)"
+
+❌ git commit -m "Add new feature"  # Missing prefix
+❌ git commit -m "Feature: add auth"  # Wrong prefix
+❌ git commit -m "feat add auth"  # Missing colon
+```
+
+**Bypassing hooks (not recommended):**
+```bash
+git commit -m "message" --no-verify
+```
+
+**Example Workflow with Hooks:**
+```bash
+# Create a feature branch
+git checkout -b feature/add-export
+
+# Make changes and commit (commit-msg hook validates)
+git commit -m "feat: add CSV export functionality"
+
+# Switch to main and merge (pre-merge-commit hook bumps version)
+git checkout main
+git merge feature/add-export
+# → Hook automatically bumps version from 1.0.0 to 1.1.0
+# → Cargo.toml and Cargo.lock are updated and staged
+
+# Push changes
+git push origin main
+```
+
+**Note:** The git hooks are versioned in the `hooks/` directory. If hooks are updated, run `./install-hooks.sh` again to update your local `.git/hooks/`.
 
 ---
 
@@ -103,11 +210,13 @@ Some tests did not pass. Please check the workflow run for details.
 
 **Branch Protection:**
 
-To require tests to pass before merging:
+To require tests and PR title checks to pass before merging:
 1. Go to repository Settings → Branches
 2. Add branch protection rule for `main`/`master`
 3. Enable "Require status checks to pass before merging"
-4. Select "test-summary" from the list
+4. Select these status checks:
+   - `test-summary` - All tests must pass
+   - `validate-title` - PR title must follow conventional commits
 5. Enable "Require branches to be up to date before merging" (recommended)
 
 ---
@@ -262,6 +371,61 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 ---
 
+## **Pull Request Requirements**
+
+### **PR Title Format** (`.github/workflows/pr-title-check.yml`)
+
+All PRs must have titles that follow [Conventional Commits](https://www.conventionalcommits.org/) format. This enables automatic version bumping when merged.
+
+**Required Format:**
+```
+<type>: <description>
+```
+
+**Valid Prefixes:**
+
+| Prefix | Description | Version Bump | Example |
+|--------|-------------|--------------|---------|
+| `feat:` | New feature | MINOR (0.1.0 → 0.2.0) | `feat: add user authentication` |
+| `feat!:` | Breaking change feature | MAJOR (0.1.0 → 1.0.0) | `feat!: redesign API` |
+| `fix:` | Bug fix | PATCH (0.1.0 → 0.1.1) | `fix: resolve login crash` |
+| `docs:` | Documentation | PATCH (0.1.0 → 0.1.1) | `docs: update README` |
+| `chore:` | Maintenance | PATCH (0.1.0 → 0.1.1) | `chore: update dependencies` |
+| `patch:` | Small patch | PATCH (0.1.0 → 0.1.1) | `patch: fix typo` |
+
+**Examples:**
+```
+✅ feat: add expense export feature
+✅ fix: correct date calculation
+✅ docs: add API documentation
+✅ chore: update Rust to 1.70
+✅ feat!: change expense data structure (breaking)
+
+❌ Add export feature (missing prefix)
+❌ Feature: add export (wrong prefix)
+❌ feat add export (missing colon)
+```
+
+**How the Check Works:**
+- Runs on PR opened, edited, reopened, or synchronized
+- **Blocks merge** if title is invalid
+- Posts helpful comment with examples if validation fails
+- Shows which version bump will be triggered
+- Automatically updates comments when title is fixed
+
+**Fix Invalid Title:**
+```bash
+# Via GitHub CLI
+gh pr edit 123 --title "feat: add user authentication"
+
+# Or edit directly in GitHub UI (top of PR page)
+```
+
+**Relationship to Version Bumping:**
+When a PR is merged to `main`/`master`, the release workflow analyzes the PR title (from the merge commit message) to determine the version bump type. This is why the correct format is required!
+
+---
+
 ## **Version Management**
 
 This project includes automated version bumping using semantic versioning (semver).
@@ -389,7 +553,7 @@ Simple interactive script for quick version bumping.
 
 **Usage:**
 ```bash
-./bump-version.sh [major|minor|patch]
+./bump-version.sh <major|minor|patch>
 ```
 
 **Examples:**
@@ -398,6 +562,8 @@ Simple interactive script for quick version bumping.
 ./bump-version.sh minor   # 0.1.0 → 0.2.0 (new features)
 ./bump-version.sh major   # 0.1.0 → 1.0.0 (breaking changes)
 ```
+
+**Note:** Bump type argument is **required** (no longer defaults to patch).
 
 **Features:**
 - Validates bump type
@@ -448,22 +614,6 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 - Requires `CARGO_REGISTRY_TOKEN` secret
 - Comment must be exactly `/pre-release --type=alpha` or `/pre-release --type=beta`
 
-#### 6. **Git Hook** (`.git/hooks/pre-merge-commit`)
-Automatically bumps version when merging into `main` or `master`.
-
-**How it works:**
-- Runs before a merge commit is created
-- Analyzes commits being merged
-- Determines version bump based on Conventional Commits
-- Automatically stages Cargo.toml and Cargo.lock
-
-**Example workflow:**
-```bash
-git checkout main
-git merge feature/add-categories
-# Hook automatically bumps version during merge
-```
-
 ### **Requirements:**
 
 Install `cargo-bump` for all methods:
@@ -479,4 +629,3 @@ cargo install cargo-bump
 4. Choose the method that fits your workflow:
    - **GitHub Actions**: Best for team projects and CI/CD
    - **Manual Script**: Best for controlled releases
-   - **Git Hook**: Best for automatic local version bumping

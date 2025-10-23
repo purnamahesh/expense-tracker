@@ -10,19 +10,33 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Parse argument (major, minor, patch)
-BUMP_TYPE=${1:-patch}
+# Parse argument (major, minor, patch) - MANDATORY
+BUMP_TYPE=$1
 
-# Validate bump type
-if [[ ! "$BUMP_TYPE" =~ ^(major|minor|patch)$ ]]; then
-  echo -e "${RED}Error: Invalid bump type '$BUMP_TYPE'${NC}"
+# Check if argument was provided
+if [ -z "$BUMP_TYPE" ]; then
+  echo -e "${RED}Error: Bump type is required${NC}"
   echo ""
-  echo "Usage: $0 [major|minor|patch]"
+  echo "Usage: $0 <major|minor|patch>"
   echo ""
   echo "Examples:"
   echo "  $0 major   # 0.1.0 → 1.0.0 (breaking changes)"
   echo "  $0 minor   # 0.1.0 → 0.2.0 (new features)"
   echo "  $0 patch   # 0.1.0 → 0.1.1 (bug fixes)"
+  echo ""
+  exit 1
+fi
+
+# Validate bump type
+if [[ ! "$BUMP_TYPE" =~ ^(major|minor|patch)$ ]]; then
+  echo -e "${RED}Error: Invalid bump type '$BUMP_TYPE'${NC}"
+  echo ""
+  echo "Usage: $0 <major|minor|patch>"
+  echo ""
+  echo "Valid options:"
+  echo "  major   # 0.1.0 → 1.0.0 (breaking changes)"
+  echo "  minor   # 0.1.0 → 0.2.0 (new features)"
+  echo "  patch   # 0.1.0 → 0.1.1 (bug fixes)"
   echo ""
   exit 1
 fi

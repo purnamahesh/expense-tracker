@@ -1,12 +1,8 @@
 name: Test
 
 on:
-  push:
-    branches:
-      - 'feature/**'
-      - 'fix/**'
-      - 'patch/**'
   pull_request:
+    types: [opened, reopened, synchronize]
     branches:
       - main
       - master
