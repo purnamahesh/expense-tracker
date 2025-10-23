@@ -129,18 +129,13 @@ Manually run the workflow with custom options:
 1. Go to Actions → Test workflow
 2. Click "Run workflow"
 3. Select options:
-   - ✅ **Skip all tests** - Emergency override
-   - **Run code coverage** - Enable/disable coverage
-   - **Test operating systems** - Choose which OSes to test:
-     - `all` - Ubuntu, macOS, Windows (default)
-     - `ubuntu-only` - Ubuntu only (faster)
-     - `ubuntu-macos` - Ubuntu + macOS
-     - `ubuntu-windows` - Ubuntu + Windows
+   - ✅ **Skip all tests** - Emergency override (bypasses all tests)
+   - ✅ **Run code coverage** - Enable/disable coverage generation
 
 **Use cases:**
-- Quick iteration during development
+- Emergency deployments
 - CI maintenance/debugging
-- Save CI minutes
+- Skip expensive coverage generation for faster feedback
 
 #### **3. Repository Variable** (Global disable)
 Disable tests for all pushes/PRs (emergency use):
