@@ -77,7 +77,7 @@ impl<'a> Expense<'a> {
 
     pub fn list_expenses() {
 
-        let content = read_file_content(None);
+        let content: String = read_file_content(None);
 
         println!("{}", HEADER);
         for line in content.trim().split('\n') {

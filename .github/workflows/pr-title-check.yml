@@ -1,0 +1,215 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches:
+      - main
+      - master
+
+permissions:
+  pull-requests: write
+  statuses: write
+
+jobs:
+  validate-title:
+    runs-on: ubuntu-latest
+    # This job is required for branch protection
+
+    steps:
+      - name: Validate PR Title
+        id: validate
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+
+          echo "Checking PR title: $PR_TITLE"
+
+          # Define valid prefixes for conventional commits
+          # These match the version bump logic in release.yml
+          VALID_PREFIXES=(
+            "feat:"           # New feature (MINOR bump)
+            "feat!:"          # Breaking change feature (MAJOR bump)
+            "fix:"            # Bug fix (PATCH bump)
+            "docs:"           # Documentation changes (PATCH bump)
+            "chore:"          # Maintenance tasks (PATCH bump)
+            "patch:"          # Small patches (PATCH bump)
+            "BREAKING CHANGE:" # Breaking change (MAJOR bump)
+          )
+
+          # Check if PR title starts with any valid prefix
+          VALID=false
+          MATCHED_PREFIX=""
+
+          for prefix in "${VALID_PREFIXES[@]}"; do
+            if [[ "$PR_TITLE" == "$prefix"* ]]; then
+              VALID=true
+              MATCHED_PREFIX="$prefix"
+              break
+            fi
+          done
+
+          if [ "$VALID" = true ]; then
+            echo "✅ PR title is valid"
+            echo "✅ Matched prefix: $MATCHED_PREFIX"
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "prefix=$MATCHED_PREFIX" >> $GITHUB_OUTPUT
+
+            # Determine version bump type
+            if [[ "$MATCHED_PREFIX" == "feat!:" ]] || [[ "$MATCHED_PREFIX" == "BREAKING CHANGE:" ]]; then
+              echo "version_bump=MAJOR" >> $GITHUB_OUTPUT
+              echo "📦 Will trigger: MAJOR version bump (breaking change)"
+            elif [[ "$MATCHED_PREFIX" == "feat:" ]]; then
+              echo "version_bump=MINOR" >> $GITHUB_OUTPUT
+              echo "📦 Will trigger: MINOR version bump (new feature)"
+            else
+              echo "version_bump=PATCH" >> $GITHUB_OUTPUT
+              echo "📦 Will trigger: PATCH version bump"
+            fi
+          else
+            echo "❌ PR title is invalid"
+            echo "valid=false" >> $GITHUB_OUTPUT
+
+            echo ""
+            echo "PR title must start with one of:"
+            echo "  - feat:     (new feature, MINOR bump)"
+            echo "  - feat!:    (breaking feature, MAJOR bump)"
+            echo "  - fix:      (bug fix, PATCH bump)"
+            echo "  - docs:     (documentation, PATCH bump)"
+            echo "  - chore:    (maintenance, PATCH bump)"
+            echo "  - patch:    (small patch, PATCH bump)"
+            echo ""
+            echo "Examples:"
+            echo "  ✅ feat: add user authentication"
+            echo "  ✅ fix: resolve login issue"
+            echo "  ✅ docs: update API documentation"
+            echo "  ✅ feat!: redesign data structure"
+            echo ""
+            echo "Current title: $PR_TITLE"
+
+            exit 1
+          fi
+
+      - name: Comment on PR (if invalid)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prTitle = '${{ github.event.pull_request.title }}';
+            const prNumber = ${{ github.event.pull_request.number }};
+
+            const body = '## ❌ Invalid PR Title Format\n\n' +
+              '**Current title:** `' + prTitle + '`\n\n' +
+              'Your PR title must follow the [Conventional Commits](https://www.conventionalcommits.org/) format to enable automatic version bumping.\n\n' +
+              '### ✅ Valid Prefixes:\n\n' +
+              '| Prefix | Description | Version Bump |\n' +
+              '|--------|-------------|--------------|\\n' +
+              '| `feat:` | New feature | MINOR (0.1.0 → 0.2.0) |\n' +
+              '| `feat!:` | Breaking change feature | MAJOR (0.1.0 → 1.0.0) |\n' +
+              '| `fix:` | Bug fix | PATCH (0.1.0 → 0.1.1) |\n' +
+              '| `docs:` | Documentation | PATCH (0.1.0 → 0.1.1) |\n' +
+              '| `chore:` | Maintenance | PATCH (0.1.0 → 0.1.1) |\n' +
+              '| `patch:` | Small patch | PATCH (0.1.0 → 0.1.1) |\n\n' +
+              '### 📝 Examples:\n\n' +
+              '```\n' +
+              '✅ feat: add user authentication\n' +
+              '✅ fix: resolve login crash\n' +
+              '✅ docs: update README\n' +
+              '✅ chore: update dependencies\n' +
+              '✅ feat!: redesign API (breaking change)\n' +
+              '```\n\n' +
+              '### 🔧 How to Fix:\n\n' +
+              'Edit your PR title to include the correct prefix:\n' +
+              '```bash\n' +
+              'gh pr edit ' + prNumber + ' --title "feat: your feature description"\n' +
+              '```\n\n' +
+              'Or edit via GitHub UI (top of this PR page).\n\n' +
+              '---\n' +
+              '*This check is required for merge. The version bump on release depends on this format.*';
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## ❌ Invalid PR Title Format')
+            );
+
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Comment on PR (if valid)
+        if: success() && steps.validate.outputs.valid == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prefix = '${{ steps.validate.outputs.prefix }}';
+            const versionBump = '${{ steps.validate.outputs.version_bump }}';
+
+            const body = '## ✅ PR Title Valid\n\n' +
+              '**Prefix:** `' + prefix + '`\n' +
+              '**Version Bump:** ' + versionBump + '\n\n' +
+              'Your PR title follows the conventional commit format. When merged to `main`/`master`, this will trigger a **' + versionBump + '** version bump.\n\n' +
+              '---\n' +
+              '*Automatic version management enabled* 🚀';
+
+            // Find existing comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            // Delete old error comments
+            const errorComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## ❌ Invalid PR Title Format')
+            );
+
+            if (errorComment) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: errorComment.id
+              });
+            }
+
+            // Find existing success comment
+            const successComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## ✅ PR Title Valid')
+            );
+
+            // Update or create success comment
+            if (successComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: successComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

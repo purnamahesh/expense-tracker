@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Commit message validation hook
+# This hook validates that commit messages follow conventional commit format
+# and suggests adding [skip tests] suffix if not present
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Define valid prefixes (conventional commit types)
+VALID_PREFIXES="^(feat!|feat|fix!|fix|patch!|patch|chore!|chore|docs!|docs|style!|style|refactor!|refactor|perf!|perf|test!|test|build!|build|ci!|ci|revert!|revert):"
+
+# Color codes for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Check if commit message matches valid prefix pattern
+if ! echo "$COMMIT_MSG" | grep -qE "$VALID_PREFIXES"; then
+    echo -e "${RED}ERROR: Invalid commit message format!${NC}"
+    echo ""
+    echo "Commit message must start with one of the following prefixes:"
+    echo "  - feat:      A new feature"
+    echo "  - feat!:     A new feature with breaking changes"
+    echo "  - fix:       A bug fix"
+    echo "  - fix!:      A bug fix with breaking changes"
+    echo "  - patch:     A patch or minor fix"
+    echo "  - chore:     Routine tasks, maintenance"
+    echo "  - docs:      Documentation changes"
+    echo "  - style:     Code style changes (formatting, etc.)"
+    echo "  - refactor:  Code refactoring"
+    echo "  - perf:      Performance improvements"
+    echo "  - test:      Adding or updating tests"
+    echo "  - build:     Build system or dependency changes"
+    echo "  - ci:        CI/CD configuration changes"
+    echo "  - revert:    Reverting a previous commit"
+    echo ""
+    echo "Add '!' before ':' for breaking changes (e.g., feat!:, fix!:)"
+    echo ""
+    echo "Example: feat: add user authentication"
+    echo "Example: fix!: correct payment calculation logic"
+    echo ""
+    exit 1
+fi
+
+# Check if [skip tests] suffix is present
+if ! echo "$COMMIT_MSG" | grep -q "\[skip tests\]"; then
+    echo -e "${YELLOW}SUGGESTION: Consider adding [skip tests] suffix if tests should be skipped${NC}"
+    echo ""
+    echo "Your commit message:"
+    echo -e "${GREEN}$COMMIT_MSG${NC}"
+    echo ""
+    echo "To skip tests in CI, append [skip tests] to your commit message:"
+    echo "Example: feat: add new feature [skip tests]"
+    echo ""
+    echo -e "${GREEN}Proceeding with commit...${NC}"
+fi
+
+exit 0
