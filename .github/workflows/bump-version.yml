@@ -1,0 +1,212 @@
+name: Bump Version (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      bump_type:
+        description: 'Version bump type (major, minor, patch, or prerelease)'
+        required: true
+        type: string
+      prerelease_type:
+        description: 'Prerelease type (alpha or beta) - only used when bump_type is prerelease'
+        required: false
+        type: string
+        default: ''
+      source_ref:
+        description: 'Git ref to bump version from'
+        required: true
+        type: string
+      pr_title_prefix:
+        description: 'Prefix for the PR title (e.g., "pre-release" or "release")'
+        required: true
+        type: string
+    outputs:
+      new_version:
+        description: 'The new version after bumping'
+        value: ${{ jobs.bump-version.outputs.new_version }}
+      old_version:
+        description: 'The old version before bumping'
+        value: ${{ jobs.bump-version.outputs.old_version }}
+      pr_number:
+        description: 'The PR number created for version bump'
+        value: ${{ jobs.bump-version.outputs.pr_number }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      old_version: ${{ steps.version.outputs.old_version }}
+      pr_number: ${{ steps.create-pr.outputs.pr_number }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Cache cargo-bump
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bump
+          key: ${{ runner.os }}-cargo-bump-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-bump
+        run: |
+          if ! command -v cargo-bump &> /dev/null; then
+            cargo install cargo-bump
+          else
+            echo "cargo-bump already installed"
+          fi
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Bump version
+        id: version
+        run: |
+          CURRENT_VERSION="${{ steps.current.outputs.old_version }}"
+          echo "Current version: $CURRENT_VERSION"
+
+          BUMP_TYPE="${{ inputs.bump_type }}"
+
+          if [ "$BUMP_TYPE" = "prerelease" ]; then
+            PRERELEASE_TYPE="${{ inputs.prerelease_type }}"
+
+            # Set suffix based on type (a for alpha, b for beta)
+            if [ "$PRERELEASE_TYPE" = "alpha" ]; then
+              SUFFIX="a"
+            else
+              SUFFIX="b"
+            fi
+
+            # Check if already a pre-release version with same type
+            if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
+              # Extract base version and current pre-release number
+              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
+              CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
+              NEW_NUM=$((CURRENT_NUM + 1))
+              NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
+            else
+              # Check if it's a different pre-release type (switch from a to b or vice versa)
+              if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
+                # Remove old pre-release suffix
+                BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
+                NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+              else
+                # Not a pre-release, bump patch and add suffix
+                cargo bump patch
+                BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+                NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+              fi
+            fi
+
+            # Update Cargo.toml with pre-release version (portable sed)
+            if [ "$(uname)" = "Darwin" ]; then
+              # macOS requires explicit backup extension
+              sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+            else
+              # Linux doesn't require it
+              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+            fi
+          else
+            # Regular semver bump (major, minor, or patch)
+            cargo bump $BUMP_TYPE
+            NEW_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          fi
+
+          echo "New version: $NEW_VERSION"
+
+          # Update Cargo.lock with new version
+          PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
+          cargo update -p "$PACKAGE_NAME" --quiet
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create version bump branch
+        id: branch
+        run: |
+          BRANCH_NAME="version-bump/${{ steps.version.outputs.new_version }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH_NAME"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          git push origin "$BRANCH_NAME"
+
+      - name: Create Pull Request
+        id: create-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const oldVersion = '${{ steps.version.outputs.old_version }}';
+            const newVersion = '${{ steps.version.outputs.new_version }}';
+            const branchName = '${{ steps.branch.outputs.branch_name }}';
+            const titlePrefix = '${{ inputs.pr_title_prefix }}';
+
+            // Get the default branch
+            const repo = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const defaultBranch = repo.data.default_branch;
+
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `chore: bump version ${oldVersion} -> ${newVersion}`,
+              head: branchName,
+              base: defaultBranch,
+              body: `## Version Bump: ${oldVersion} -> ${newVersion}\n\n` +
+                    `**Type:** ${titlePrefix}\n\n` +
+                    `This PR bumps the version from \`${oldVersion}\` to \`${newVersion}\`.\n\n` +
+                    `### Changes:\n` +
+                    `- Updated \`Cargo.toml\` with new version\n` +
+                    `- Updated \`Cargo.lock\`\n\n` +
+                    `🤖 This PR was automatically created by the ${titlePrefix} workflow.`
+            });
+
+            core.setOutput('pr_number', pr.data.number);
+            core.setOutput('pr_url', pr.data.html_url);
+
+            console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+
+            return pr.data.number;
+
+      - name: Auto-merge PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.create-pr.outputs.pr_number }};
+
+            // Enable auto-merge
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                merge_method: 'squash'
+              });
+              console.log(`Successfully merged PR #${prNumber}`);
+            } catch (error) {
+              console.log(`Failed to auto-merge: ${error.message}`);
+              console.log('The PR will need to be merged manually');
+            }

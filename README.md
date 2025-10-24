@@ -439,12 +439,17 @@ Automatically bumps version and publishes to crates.io when pushing to `main` or
 - **Check for Changes:**
   - Skips release if no `.rs` files changed since last tag
   - Displays skip message in workflow logs
-- **Job 1 (Version Bump):**
+- **Job 1 (Check Changes & Determine Bump Type):**
   - Analyzes commit messages since the last git tag
   - Determines version bump type based on Conventional Commits
-  - Commits changes and creates a git tag
-  - Pushes everything back to the repository
-- **Job 2 (Publish):**
+- **Job 2 (Version Bump):**
+  - Uses the reusable `bump-version.yml` workflow
+  - Creates a new branch with version changes
+  - Creates a PR with title: `chore: bump version X.X.X -> Y.Y.Y`
+  - Automatically merges the PR
+- **Job 3 (Publish):**
+  - Waits for the version bump PR to be merged
+  - Creates a git tag for the new version
   - Automatically publishes the new version to crates.io
 
 **Setup:**
@@ -578,21 +583,29 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 
 **How it works:**
 - Triggered by commenting on a PR with `/pre-release --type=alpha` or `/pre-release --type=beta`
-- **Check for Changes:**
+- **Job 1 (Check for Changes):**
   - Skips pre-release if no `.rs` files changed in the PR
   - Adds a skip message comment to the PR
-- Bumps version with pre-release suffix (e.g., `0.1.1a0`, `1.2.3b2`)
-- Publishes to crates.io
-- Adds a comment to the PR with version info
-- Reacts with 👍 on success or 👎 on failure
+- **Job 2 (Version Bump):**
+  - Uses the reusable `bump-version.yml` workflow
+  - Creates a new branch with pre-release version changes
+  - Creates a PR with title: `chore: bump version X.X.X -> Y.Y.YaZ` (or `bZ` for beta)
+  - Automatically merges the PR
+- **Job 3 (Publish):**
+  - Waits for the version bump PR to be merged
+  - Creates a git tag for the new pre-release version
+  - Publishes to crates.io
+  - Adds a comment to the PR with version info
+  - Reacts with 👍 on success or 👎 on failure
 
 **Usage:**
 1. Open a pull request
 2. Add a comment: `/pre-release --type=alpha` or `/pre-release --type=beta`
 3. Workflow automatically:
    - Bumps version with suffix (e.g., `0.1.0` → `0.1.1a0` or `0.1.1a0` → `0.1.1a1`)
+   - Creates a version bump PR and auto-merges it
    - Updates Cargo.toml and Cargo.lock
-   - Commits and tags the version
+   - Creates a git tag for the new version
    - Publishes to crates.io
    - Reports back in PR comments
 
@@ -621,11 +634,29 @@ Install `cargo-bump` for all methods:
 cargo install cargo-bump
 ```
 
+### **Reusable Version Bump Workflow** (`.github/workflows/bump-version.yml`)
+
+A shared workflow used by both `release.yml` and `pre-release.yml` to handle version bumping consistently.
+
+**Features:**
+- ✓ Creates a new branch for version changes
+- ✓ Creates a PR with clear title showing the version change
+- ✓ Automatically merges the PR
+- ✓ Supports both semantic versioning (major/minor/patch) and pre-releases (alpha/beta)
+- ✓ Updates both Cargo.toml and Cargo.lock
+- ✓ Returns version information and PR number for downstream jobs
+
+**Benefits:**
+- **DRY Principle**: Version bumping logic is centralized in one place
+- **Code Review**: PRs allow for review and CI checks before version bump is applied
+- **Audit Trail**: Clear history of version changes through PR records
+- **Consistency**: Both release and pre-release workflows use the same logic
+
 ### **Best Practices:**
 
 1. **Use Conventional Commits** for automatic version detection
-2. **Create git tags** for each release to track version history
-3. **Push tags** along with commits: `git push origin --tags`
+2. **Version changes create PRs** instead of direct commits for better traceability
+3. **Git tags are created** after PR merge to track version history
 4. Choose the method that fits your workflow:
-   - **GitHub Actions**: Best for team projects and CI/CD
-   - **Manual Script**: Best for controlled releases
+   - **GitHub Actions**: Best for team projects and CI/CD (creates PRs for review)
+   - **Manual Script**: Best for controlled releases (direct local control)
