@@ -147,6 +147,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Delete remote branch if it exists
+          if git ls-remote --exit-code --heads origin "$BRANCH_NAME" > /dev/null 2>&1; then
+            echo "Remote branch $BRANCH_NAME exists, deleting it..."
+            git push origin --delete "$BRANCH_NAME"
+          fi
+
           git checkout -b "$BRANCH_NAME"
           git add Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]"
