@@ -11,14 +11,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  bump-version:
+  check-rust-changes:
     runs-on: ubuntu-latest
 
     # Prevent infinite loops from version bump commits
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     outputs:
-      new_version: ${{ steps.version.outputs.new_version }}
+      has_changes: ${{ steps.rust_changes.outputs.has_changes }}
+      bump_type: ${{ steps.semver.outputs.bump }}
 
     steps:
       - name: Checkout code
@@ -63,26 +64,6 @@ jobs:
           echo "⏭️ Skipping release - no Rust file changes detected"
           exit 0
 
-      - name: Set up Rust
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache cargo-bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-bump
-          key: ${{ runner.os }}-cargo-bump-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install cargo-bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        run: |
-          if ! command -v cargo-bump &> /dev/null; then
-            cargo install cargo-bump
-          else
-            echo "cargo-bump already installed"
-          fi
-
       - name: Determine version bump type
         if: steps.rust_changes.outputs.has_changes == 'true'
         id: semver
@@ -115,43 +96,17 @@ jobs:
             echo "Defaulting to PATCH bump"
           fi
 
-      - name: Bump version in Cargo.toml
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        id: version
-        run: |
-          echo "Current version:"
-          grep "^version" Cargo.toml | head -1
-
-          cargo bump ${{ steps.semver.outputs.bump }}
-
-          echo "New version:"
-          grep "^version" Cargo.toml | head -1
-
-          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-
-          # Update Cargo.lock with new version
-          PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
-          cargo update -p "$PACKAGE_NAME" --quiet
-
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Commit version bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git tag "v$NEW_VERSION"
-
-      - name: Push changes and tags
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        run: |
-          git push origin ${{ github.ref_name }}
-          git push origin --tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  bump-version:
+    needs: check-rust-changes
+    if: needs.check-rust-changes.outputs.has_changes == 'true'
+    uses: ./.github/workflows/bump-version.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      bump_type: ${{ needs.check-rust-changes.outputs.bump_type }}
+      source_ref: ${{ github.ref_name }}
+      pr_title_prefix: release
 
   publish:
     runs-on: ubuntu-latest
@@ -159,6 +114,36 @@ jobs:
     if: needs.bump-version.outputs.new_version != ''
 
     steps:
+      - name: Wait for version bump PR to be merged
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ needs.bump-version.outputs.pr_number }};
+            const maxAttempts = 60; // Wait up to 5 minutes
+            const delay = 5000; // 5 seconds between checks
+
+            for (let i = 0; i < maxAttempts; i++) {
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              if (pr.data.merged) {
+                console.log(`PR #${prNumber} has been merged!`);
+                return;
+              }
+
+              if (pr.data.state === 'closed' && !pr.data.merged) {
+                throw new Error(`PR #${prNumber} was closed without merging`);
+              }
+
+              console.log(`Waiting for PR #${prNumber} to be merged... (${i + 1}/${maxAttempts})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+
+            throw new Error(`Timeout waiting for PR #${prNumber} to be merged`);
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -169,6 +154,13 @@ jobs:
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Create tag for version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ needs.bump-version.outputs.new_version }}"
+          git push origin "v${{ needs.bump-version.outputs.new_version }}"
 
       - name: Verify package before publish
         run: cargo publish --dry-run

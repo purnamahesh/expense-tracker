@@ -42,13 +42,14 @@ jobs:
             echo "Not a pre-release command"
           fi
 
-  bump-and-publish:
+  check-rust-changes:
     needs: check-comment
     if: needs.check-comment.outputs.should_run == 'true'
     runs-on: ubuntu-latest
 
     outputs:
-      new_version: ${{ steps.version.outputs.new_version }}
+      has_changes: ${{ steps.rust_changes.outputs.has_changes }}
+      pr_ref: ${{ steps.pr.outputs.ref }}
 
     steps:
       - name: Get PR branch
@@ -105,118 +106,86 @@ jobs:
               body: '⏭️ **Skipping pre-release** - No Rust file changes detected in this PR'
             });
 
-      - name: Exit if no changes
-        if: steps.rust_changes.outputs.has_changes == 'false'
-        run: exit 0
+  bump-version:
+    needs: [check-comment, check-rust-changes]
+    if: needs.check-rust-changes.outputs.has_changes == 'true'
+    uses: ./.github/workflows/bump-version.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      bump_type: prerelease
+      prerelease_type: ${{ needs.check-comment.outputs.prerelease_type }}
+      source_ref: ${{ needs.check-rust-changes.outputs.pr_ref }}
+      pr_title_prefix: pre-release
+
+  publish:
+    needs: [check-comment, bump-version]
+    if: needs.bump-version.outputs.new_version != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for version bump PR to be merged
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ needs.bump-version.outputs.pr_number }};
+            const maxAttempts = 60; // Wait up to 5 minutes
+            const delay = 5000; // 5 seconds between checks
+
+            for (let i = 0; i < maxAttempts; i++) {
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              if (pr.data.merged) {
+                console.log(`PR #${prNumber} has been merged!`);
+                return;
+              }
+
+              if (pr.data.state === 'closed' && !pr.data.merged) {
+                throw new Error(`PR #${prNumber} was closed without merging`);
+              }
+
+              console.log(`Waiting for PR #${prNumber} to be merged... (${i + 1}/${maxAttempts})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+
+            throw new Error(`Timeout waiting for PR #${prNumber} to be merged`);
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-rust-changes.outputs.pr_ref }}
+
+      - name: Pull latest changes
+        run: git pull origin ${{ needs.check-rust-changes.outputs.pr_ref }}
 
       - name: Set up Rust
-        if: steps.rust_changes.outputs.has_changes == 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Cache cargo-bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-bump
-          key: ${{ runner.os }}-cargo-bump-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install cargo-bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        run: |
-          if ! command -v cargo-bump &> /dev/null; then
-            cargo install cargo-bump
-          else
-            echo "cargo-bump already installed"
-          fi
-
-      - name: Bump to pre-release version
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        id: version
-        run: |
-          echo "Current version:"
-          CURRENT_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          echo "$CURRENT_VERSION"
-
-          PRERELEASE_TYPE="${{ needs.check-comment.outputs.prerelease_type }}"
-
-          # Set suffix based on type (a for alpha, b for beta)
-          if [ "$PRERELEASE_TYPE" = "alpha" ]; then
-            SUFFIX="a"
-          else
-            SUFFIX="b"
-          fi
-
-          # Check if already a pre-release version with same type
-          if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
-            # Extract base version and current pre-release number
-            BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
-            CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
-            NEW_NUM=$((CURRENT_NUM + 1))
-            NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
-          else
-            # Check if it's a different pre-release type (switch from a to b or vice versa)
-            if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
-              # Remove old pre-release suffix
-              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
-              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
-            else
-              # Not a pre-release, bump patch and add suffix
-              cargo bump patch
-              BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
-            fi
-          fi
-
-          # Update Cargo.toml with pre-release version (portable sed)
-          if [ "$(uname)" = "Darwin" ]; then
-            # macOS requires explicit backup extension
-            sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
-          else
-            # Linux doesn't require it
-            sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
-          fi
-
-          echo "New version: $NEW_VERSION"
-
-          # Update Cargo.lock with new version
-          PACKAGE_NAME=$(cargo pkgid | cut -d# -f1 | rev | cut -d/ -f1 | rev)
-          cargo update -p "$PACKAGE_NAME" --quiet
-
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Commit version bump
-        if: steps.rust_changes.outputs.has_changes == 'true'
+      - name: Create tag for version
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
-          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-          git tag "v$NEW_VERSION"
-
-      - name: Push changes and tags
-        if: steps.rust_changes.outputs.has_changes == 'true'
-        run: |
-          git push origin ${{ steps.pr.outputs.ref }}
-          git push origin --tags
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git tag "v${{ needs.bump-version.outputs.new_version }}"
+          git push origin "v${{ needs.bump-version.outputs.new_version }}"
 
       - name: Verify package before publish
-        if: steps.rust_changes.outputs.has_changes == 'true'
         run: cargo publish --dry-run
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Publish to crates.io
-        if: steps.rust_changes.outputs.has_changes == 'true'
         run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   comment-and-react:
-    needs: [check-comment, bump-and-publish]
-    if: needs.check-comment.outputs.should_run == 'true' && needs.bump-and-publish.outputs.new_version != ''
+    needs: [check-comment, bump-version, publish]
+    if: needs.check-comment.outputs.should_run == 'true' && needs.bump-version.outputs.new_version != ''
     runs-on: ubuntu-latest
 
     steps:
@@ -224,14 +193,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const newVersion = '${{ needs.bump-and-publish.outputs.new_version }}';
+            const newVersion = '${{ needs.bump-version.outputs.new_version }}';
+            const oldVersion = '${{ needs.bump-version.outputs.old_version }}';
+            const prNumber = ${{ needs.bump-version.outputs.pr_number }};
             const prereleaseType = '${{ needs.check-comment.outputs.prerelease_type }}';
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ needs.check-comment.outputs.pr_number }},
-              body: `## 🚀 Pre-release Published\n\n**Version:** \`${newVersion}\`\n**Type:** ${prereleaseType}\n\nSuccessfully published to [crates.io](https://crates.io/crates/${{ github.event.repository.name }})!\n\n### Install this version:\n\`\`\`bash\ncargo install ${{ github.event.repository.name }} --version ${newVersion}\n\`\`\``
+              body: `## 🚀 Pre-release Published\n\n**Version:** \`${oldVersion}\` -> \`${newVersion}\`\n**Type:** ${prereleaseType}\n\nVersion bump PR: #${prNumber}\n\nSuccessfully published to [crates.io](https://crates.io/crates/${{ github.event.repository.name }})!\n\n### Install this version:\n\`\`\`bash\ncargo install ${{ github.event.repository.name }} --version ${newVersion}\n\`\`\``
             });
 
       - name: Add thumbs up reaction to trigger comment
@@ -246,7 +217,7 @@ jobs:
             });
 
   handle-failure:
-    needs: [check-comment, bump-and-publish]
+    needs: [check-comment, bump-version, publish]
     if: failure() && needs.check-comment.outputs.should_run == 'true'
     runs-on: ubuntu-latest
 
