@@ -446,6 +446,7 @@ Automatically bumps version and publishes to crates.io when pushing to `main` or
   - Uses the reusable `bump-version.yml` workflow
   - Creates a new branch with version changes
   - Creates a PR with title: `chore: bump version X.X.X -> Y.Y.Y`
+  - Automatically approves the PR
   - Automatically merges the PR
 - **Job 3 (Publish):**
   - Waits for the version bump PR to be merged
@@ -586,25 +587,26 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 - **Job 1 (Check for Changes):**
   - Skips pre-release if no `.rs` files changed in the PR
   - Adds a skip message comment to the PR
-- **Job 2 (Version Bump):**
-  - Uses the reusable `bump-version.yml` workflow
-  - Creates a new branch with pre-release version changes
-  - Creates a PR with title: `chore: bump version X.X.X -> Y.Y.YaZ` (or `bZ` for beta)
-  - Automatically merges the PR
-- **Job 3 (Publish):**
-  - Waits for the version bump PR to be merged
+- **Job 2 (Bump and Publish):**
+  - Bumps version with pre-release suffix directly on the PR branch
+  - Commits the version bump to the PR branch
   - Creates a git tag for the new pre-release version
   - Publishes to crates.io
-  - Adds a comment to the PR with version info
+- **Job 3 (Comment and React):**
+  - Adds a success comment to the PR with version info
   - Reacts with 👍 on success or 👎 on failure
+
+**Important:** This workflow does NOT merge to main/master. It only:
+- Commits version changes to your PR branch
+- Publishes a pre-release version to crates.io
+- Allows you to test the pre-release before merging the PR
 
 **Usage:**
 1. Open a pull request
 2. Add a comment: `/pre-release --type=alpha` or `/pre-release --type=beta`
 3. Workflow automatically:
    - Bumps version with suffix (e.g., `0.1.0` → `0.1.1a0` or `0.1.1a0` → `0.1.1a1`)
-   - Creates a version bump PR and auto-merges it
-   - Updates Cargo.toml and Cargo.lock
+   - Commits changes to your PR branch
    - Creates a git tag for the new version
    - Publishes to crates.io
    - Reports back in PR comments
@@ -641,16 +643,19 @@ A shared workflow used by both `release.yml` and `pre-release.yml` to handle ver
 **Features:**
 - ✓ Creates a new branch for version changes
 - ✓ Creates a PR with clear title showing the version change
+- ✓ Automatically approves the PR
 - ✓ Automatically merges the PR
 - ✓ Supports both semantic versioning (major/minor/patch) and pre-releases (alpha/beta)
 - ✓ Updates both Cargo.toml and Cargo.lock
 - ✓ Returns version information and PR number for downstream jobs
+- ✓ Includes `[skip ci]` in commit messages to prevent infinite release loops
 
 **Benefits:**
 - **DRY Principle**: Version bumping logic is centralized in one place
 - **Code Review**: PRs allow for review and CI checks before version bump is applied
 - **Audit Trail**: Clear history of version changes through PR records
 - **Consistency**: Both release and pre-release workflows use the same logic
+- **No Infinite Loops**: Version bump commits skip CI to prevent triggering another release
 
 ### **Best Practices:**
 
