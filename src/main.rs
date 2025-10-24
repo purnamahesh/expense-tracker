@@ -30,11 +30,11 @@ fn main() {
             exit(1)
         }
         else if args[1] == "add" {
-            let new_expense = Expense::new(&args);
+            let new_expense = Expense::new(args);
             append_expense(new_expense.to_psv_record().as_bytes(), None);
         }
         else if args[1] == "filter" {
-            ExpenseList::new();
+            // ExpenseList::new();
         } else {
             println!("Usage")
         }
