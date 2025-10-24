@@ -3,11 +3,13 @@ use std::{env::args, process::exit};
 pub mod utils;
 pub mod config;
 
-use crate::utils::{expense::Expense, file_parser::append_expense};
+use crate::utils::{expense::{Expense, ExpenseList}, file_parser::append_expense};
 
 fn main() {
 
     let args:Vec<String> = args().collect();
+
+    println!("{}", args.len());
 
     if args.len() == 1 {
         println!("Usage")
@@ -21,6 +23,8 @@ fn main() {
         else if args[1] == "total" {
             Expense::expense_total()
             .unwrap_or_else(|err| panic!("Error: {}", err));
+        } else {
+            println!("Usage")
         }
     } else {
         if args.len() % 2 != 0 {
@@ -29,10 +33,10 @@ fn main() {
         }
         else if args[1] == "add" {
             let new_expense = Expense::new(&args);
-            append_expense(new_expense.to_csv_record().as_bytes(), None);
+            append_expense(new_expense.to_psv_record().as_bytes(), None);
         }
         else if args[1] == "filter" {
-            
+            ExpenseList::new();
         } else {
             println!("Usage")
         }

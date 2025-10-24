@@ -9,7 +9,7 @@ Here's a great beginner Rust project for you:
 - List all expenses
 - Calculate total spending
 - Filter expenses by category
-- Save/load data to a text file (using simple format like CSV or JSON)
+- Save/load data to a text file (using simple format like PSV or JSON)
 
 **What You'll Learn:**
 - Basic Rust syntax and ownership concepts
@@ -129,7 +129,7 @@ git commit -m "message" --no-verify
 git checkout -b feature/add-export
 
 # Make changes and commit (commit-msg hook validates)
-git commit -m "feat: add CSV export functionality"
+git commit -m "feat: add PSV export functionality"
 
 # Switch to main and merge (pre-merge-commit hook bumps version)
 git checkout main
