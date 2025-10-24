@@ -9,8 +9,6 @@ fn main() {
 
     let args:Vec<String> = args().collect();
 
-    println!("{}", args.len());
-
     if args.len() == 1 {
         println!("Usage")
     } else if args.len() == 2 {

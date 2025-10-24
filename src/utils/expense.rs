@@ -100,7 +100,13 @@ impl<'a> Expense<'a> {
     }
 
     pub fn to_psv_record(&self) -> String {
-        format!("{}|{}|\"{}\"|\"{}\"\n", self.category.unwrap_or(""), self.amount, self.description.unwrap_or(""), self.tags.join(","))
+        format!(
+            "{}|{}|\"{}\"|\"{}\"\n", 
+            self.category.unwrap_or(""), 
+            self.amount, 
+            self.description.unwrap_or(""), 
+            self.tags.join(",")
+        )
     }
 
     pub fn list_expenses() {
