@@ -98,7 +98,7 @@ jobs:
 
             const body = `## ❌ Invalid PR Title Format
 
-**Current title:** \`${prTitle}\`
+**Current title:** ${prTitle}
 
 Your PR title must follow the [Conventional Commits](https://www.conventionalcommits.org/) format to enable automatic version bumping.
 
@@ -106,29 +106,26 @@ Your PR title must follow the [Conventional Commits](https://www.conventionalcom
 
 | Prefix | Description | Version Bump |
 |--------|-------------|--------------|
-| \`feat:\` | New feature | MINOR (0.1.0 → 0.2.0) |
-| \`feat!:\` | Breaking change feature | MAJOR (0.1.0 → 1.0.0) |
-| \`fix:\` | Bug fix | PATCH (0.1.0 → 0.1.1) |
-| \`docs:\` | Documentation | PATCH (0.1.0 → 0.1.1) |
-| \`chore:\` | Maintenance | PATCH (0.1.0 → 0.1.1) |
-| \`patch:\` | Small patch | PATCH (0.1.0 → 0.1.1) |
+| feat: | New feature | MINOR (0.1.0 → 0.2.0) |
+| feat!: | Breaking change feature | MAJOR (0.1.0 → 1.0.0) |
+| fix: | Bug fix | PATCH (0.1.0 → 0.1.1) |
+| docs: | Documentation | PATCH (0.1.0 → 0.1.1) |
+| chore: | Maintenance | PATCH (0.1.0 → 0.1.1) |
+| patch: | Small patch | PATCH (0.1.0 → 0.1.1) |
 
 ### 📝 Examples:
 
-\`\`\`
-✅ feat: add user authentication
-✅ fix: resolve login crash
-✅ docs: update README
-✅ chore: update dependencies
-✅ feat!: redesign API (breaking change)
-\`\`\`
+- ✅ feat: add user authentication
+- ✅ fix: resolve login crash
+- ✅ docs: update README
+- ✅ chore: update dependencies
+- ✅ feat!: redesign API (breaking change)
 
 ### 🔧 How to Fix:
 
 Edit your PR title to include the correct prefix:
-\`\`\`bash
-gh pr edit ${{ github.event.pull_request.number }} --title "feat: your feature description"
-\`\`\`
+
+    gh pr edit ${{ github.event.pull_request.number }} --title "feat: your feature description"
 
 Or edit via GitHub UI (top of this PR page).
 
@@ -174,10 +171,10 @@ Or edit via GitHub UI (top of this PR page).
 
             const body = `## ✅ PR Title Valid
 
-**Prefix:** \`${prefix}\`
+**Prefix:** ${prefix}
 **Version Bump:** ${versionBump}
 
-Your PR title follows the conventional commit format. When merged to \`main\`/\`master\`, this will trigger a **${versionBump}** version bump.
+Your PR title follows the conventional commit format. When merged to main/master, this will trigger a **${versionBump}** version bump.
 
 ---
 *Automatic version management enabled* 🚀`;
