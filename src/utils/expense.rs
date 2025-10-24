@@ -1,7 +1,9 @@
+use std::error::Error;
+use std::num::ParseFloatError;
 use std::{process::exit, vec};
 
 use crate::utils::file_parser::read_file_content;
-use crate::config::HEADER;
+use crate::config::{HEADER, DEFAULT_PATH};
 
 #[derive(Debug)]
 pub struct Expense<'a> {
@@ -12,10 +14,36 @@ pub struct Expense<'a> {
     // ,datetime TODO
 }
 
-struct ExpenseList<'a> {
+pub struct ExpenseList<'a> {
     content: String,
     expense_list: Vec<Expense<'a>>
 }
+
+impl<'a> ExpenseList<'a> {
+
+    pub fn new() -> Self {
+        ExpenseList { content: String::from(""), expense_list: vec![] }
+    }
+
+    // pub fn load_expenses_from_psv(&mut self, file_path: Option<&str>) -> Result<(), ParseFloatError>{
+    //     let content: String = read_file_content(None);
+    //     for line in content.trim().split('\n') {
+    //         let fields:Vec<&str> = line.trim().split('|').collect() ;
+    //         self.expense_list.push(
+    //             Expense { 
+    //                 amount: fields[1].trim().parse::<f64>()?, 
+    //                 description: Some(fields[2].to_owned()),
+    //                 category: Some(fields[0]), 
+    //                 tags: fields[3].trim().split(',').
+    //             }
+    //         );
+    //     }
+    //     self.content = content;
+    //     Ok(())
+    // }
+
+}
+
 
 impl<'a> Expense<'a> {
     pub fn new(args: &'a Vec<String>) -> Expense<'a> {
@@ -71,7 +99,7 @@ impl<'a> Expense<'a> {
         return true;
     }
 
-    pub fn to_csv_record(&self) -> String {
+    pub fn to_psv_record(&self) -> String {
         format!("{}|{}|\"{}\"|\"{}\"\n", self.category.unwrap_or(""), self.amount, self.description.unwrap_or(""), self.tags.join(","))
     }
 
