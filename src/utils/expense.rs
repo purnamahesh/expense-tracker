@@ -144,8 +144,9 @@ impl Expense {
         let expense_list = Self::get_expense_list_from_psv(None);
 
         let filtered_list = expense_list.expense_list.iter().filter(|exp| {
-            ( filters.get("amount").is_some() && filters.get("amount").unwrap().trim() == exp.amount.to_string() ) &&
-            ( filters.get("category").is_some() && filters.get("category").unwrap().trim() == exp.category )
+            let amount_flag = if filters.get("amount").is_some(){ filters.get("amount").unwrap().trim() == exp.amount.to_string() } else { true };
+            let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().trim() == exp.category } else { true };
+            amount_flag && category_flag
         });
 
         println!("{}", HEADER);
