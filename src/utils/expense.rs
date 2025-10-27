@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+use std::fmt::Error;
 use std::num::ParseFloatError;
-use std::{process::exit, vec};
+use std::{process::exit, vec, io::Write};
+use std::fs::OpenOptions;
 
+use crate::utils::args_parser::{add_parse_args, filter_parse_args};
 use crate::utils::file_parser::read_file_content;
 use crate::config::{HEADER, DEFAULT_PATH};
 
@@ -29,12 +33,12 @@ impl ExpenseList {
         for line in content.trim().split('\n') {
             let fields:Vec<&str> = line.trim().split('|').collect() ;
             self.expense_list.push(
-                Expense { 
-                    amount: fields[1].trim().parse::<f64>()?, 
-                    description: Some(fields[2].to_owned()),
+                Expense {
+                    amount: fields[1].trim().parse::<f64>()?,
+                    description: Some(fields[2][1..fields[2].len()-1].to_owned()),
                     category: fields[0].to_owned(), 
-                    tags: fields[3].trim().split(',')
-                    .map(|s| s.to_string()).collect()
+                    tags: fields[3][1..fields[3].len()-1]
+                    .trim().split(',').map(|s| s.to_string()).collect()
                 }
             );
         }
@@ -46,44 +50,12 @@ impl ExpenseList {
 
 
 impl Expense {
-    pub fn new(args: Vec<String>) -> Expense {
-        let (amount, description, category, tags) = Self::add_parse_args(args);
+
+    pub fn new(amount:f64, description:Option<String>, category:String, tags:Vec<String>) -> Expense {
         if ! Self::validate_expense(amount, &category) {
             exit(1)
         }
         Expense { amount: amount, description: description, category: category, tags: tags }
-    }
-
-    fn add_parse_args(args: Vec<String>) -> (f64, Option<String>, String, Vec<String>){
-        let mut description: Option<String> = None;
-        let mut amount: f64 = 0.0;
-        let mut category: String = "".to_string();
-        let mut tags: Vec<String> = vec![];
-
-        for i in 2..args.len() {
-            if i % 2 == 0 {
-                match args[i].as_str() {
-                    "--description" => {
-                        description = Some(args[i+1].to_owned());
-                    },
-                    "--amount" => {
-                        amount = args[i+1].trim().parse().expect("Error whiel parsing");
-                    },
-                    "--category" => {
-                        category = args[i+1].to_owned();
-                    },
-                    "--tags" => {
-                        tags = args[i+1].split(',').map(|s| s.to_string()).collect();
-                    },
-                    _ => {
-                        println!("Invalid argument {}", args[i]);
-                        exit(1)
-                    }
-                }
-            }
-        }
-
-        (amount, description, category, tags)
     }
 
     fn validate_expense(amount: f64, category: &str) -> bool {
@@ -98,6 +70,22 @@ impl Expense {
         return true;
     }
 
+    pub fn write_expense_to_psv(&self, file_path: Option<&str>) {
+
+        let record = self.to_psv_record();
+        let content = record.as_bytes();
+    
+        let path = file_path.unwrap_or(DEFAULT_PATH);
+        
+        let mut file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .unwrap_or_else(|err| panic!("Error: {}", err));
+
+        file.write_all(content);
+    }
+
     pub fn to_psv_record(&self) -> String {
         format!(
             "{}|{}|\"{}\"|\"{}\"\n", 
@@ -110,33 +98,69 @@ impl Expense {
 
     pub fn list_expenses() {
 
-        let content: String = read_file_content(None);
+        let expense_list = Self::get_expense_list_from_psv(None);
 
         println!("{}", HEADER);
-        for line in content.trim().split('\n') {
-            let x = line.split('|').collect::<Vec<&str>>(); 
+
+        for expense in expense_list.expense_list {
             println!(
-                "{}, {}, {}, {}",
-                x[0], x[1], x[2], x[3]
+                "{}\t\t\t\t{}\t\t\t\t{}\t\t\t\t{:?}",
+                expense.category, 
+                expense.amount, 
+                expense.description.unwrap_or("".to_string()), 
+                expense.tags
             );
         }
     }
 
     pub fn expense_total() -> Result<(), Box<dyn std::error::Error>> {
 
-        let content = read_file_content(None);
+        let expense_list = Self::get_expense_list_from_psv(None);
 
         let mut total:f64 = 0.0;
 
-        for line in content.trim().split('\n') {
-            let x = line.split('|').collect::<Vec<&str>>(); 
-            total += x[1].trim().parse::<f64>()?;
+        for expense in expense_list.expense_list {
+            total += expense.amount;
         }
 
         println!("Total: {}", total);
 
         Ok(())
     }
- 
+
+    fn get_expense_list_from_psv(file_path: Option<&str>) -> ExpenseList {
+        let mut expense_list = ExpenseList::new();
+
+        expense_list.load_expenses_from_psv(None).unwrap_or_else(|err| {
+            eprintln!("Error : {}", err);
+            exit(1);
+        });
+
+        expense_list
+    }
+
+    pub fn filter_expenses(filters: HashMap<String, String>) -> Result<(), Error>{
+
+        let expense_list = Self::get_expense_list_from_psv(None);
+
+        let filtered_list = expense_list.expense_list.iter().filter(|exp| {
+            ( filters.get("amount").is_some() && filters.get("amount").unwrap().trim() == exp.amount.to_string() ) &&
+            ( filters.get("category").is_some() && filters.get("category").unwrap().trim() == exp.category )
+        });
+
+        println!("{}", HEADER);
+
+        for expense in filtered_list {
+            println!(
+                "{}\t\t\t\t{}\t\t\t\t{}\t\t\t\t{:?}",
+                expense.category,
+                expense.amount, 
+                expense.description.as_ref().unwrap_or(&"".to_string()), 
+                expense.tags
+            );
+        }
+
+        Ok(())
+    }
     
 }
