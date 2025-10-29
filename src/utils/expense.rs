@@ -4,7 +4,6 @@ use std::num::ParseFloatError;
 use std::{process::exit, vec, io::Write};
 use std::fs::OpenOptions;
 
-use crate::utils::args_parser::{add_parse_args, filter_parse_args};
 use crate::utils::file_parser::read_file_content;
 use crate::config::{HEADER, DEFAULT_PATH};
 
@@ -96,21 +95,29 @@ impl Expense {
         )
     }
 
-    pub fn list_expenses() {
+    pub fn display_expenses(expense_list: Vec<&Expense>
+    ) {
+        println!("{:<20}{:<10}{:<50}{:<10}", "Category", "Amount", "Description", "Tags");
 
-        let expense_list = Self::get_expense_list_from_psv(None);
-
-        println!("{}", HEADER);
-
-        for expense in expense_list.expense_list {
+        for expense in expense_list.iter() {
             println!(
-                "{}\t\t\t\t{}\t\t\t\t{}\t\t\t\t{:?}",
-                expense.category, 
+                "{:<20}{:<10}{:<50}{:?}",
+                expense.category,
                 expense.amount, 
-                expense.description.unwrap_or("".to_string()), 
+                expense.description.as_ref().unwrap_or(&"".to_string()).as_str(), 
                 expense.tags
             );
         }
+    }
+
+    pub fn list_expenses() {
+
+        let expense_list = Self::get_expense_list_from_psv(None);
+        let x = Vec::from_iter(expense_list.expense_list.iter().map(|x| x)) ;
+
+        Self::display_expenses(
+            x
+        );
     }
 
     pub fn expense_total() -> Result<(), Box<dyn std::error::Error>> {
@@ -148,18 +155,10 @@ impl Expense {
             let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().trim() == exp.category } else { true };
             amount_flag && category_flag
         });
+        let x = filtered_list.collect::<Vec<&Expense>>();
+        // .collect::<Vec<&Expense>>();
 
-        println!("{}", HEADER);
-
-        for expense in filtered_list {
-            println!(
-                "{}\t\t\t\t{}\t\t\t\t{}\t\t\t\t{:?}",
-                expense.category,
-                expense.amount, 
-                expense.description.as_ref().unwrap_or(&"".to_string()), 
-                expense.tags
-            );
-        }
+        Self::display_expenses(x);
 
         Ok(())
     }
