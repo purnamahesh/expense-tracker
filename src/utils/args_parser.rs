@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::process::exit;
 use std::env::args;
 use crate::utils::expense::Expense;
-use crate::utils::args_parser;
 
 pub fn filter_parse_args() -> HashMap<String, String> {
     let args:Vec<String> = args().collect();

@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::fmt::Error;
 use std::num::ParseFloatError;
 use std::{process::exit, vec, io::Write};
 use std::fs::OpenOptions;
 
 use crate::utils::file_parser::read_file_content;
-use crate::config::{HEADER, DEFAULT_PATH};
+use crate::config::DEFAULT_PATH;
 
 
 #[derive(Debug)]
@@ -28,7 +27,7 @@ impl ExpenseList {
     }
 
     pub fn load_expenses_from_psv(&mut self, file_path: Option<&str>) -> Result<(), ParseFloatError>{
-        let content: String = read_file_content(None);
+        let content: String = read_file_content(file_path);
         for line in content.trim().split('\n') {
             let fields:Vec<&str> = line.trim().split('|').collect() ;
             self.expense_list.push(
@@ -41,7 +40,7 @@ impl ExpenseList {
                 }
             );
         }
-        // self.content = content;
+
         Ok(())
     }
 
@@ -82,7 +81,10 @@ impl Expense {
         .open(path)
         .unwrap_or_else(|err| panic!("Error: {}", err));
 
-        file.write_all(content);
+        file.write_all(content).unwrap_or_else(|err| {
+            eprintln!("Error write to file: {}", err);
+            exit(1);
+        });
     }
 
     pub fn to_psv_record(&self) -> String {
@@ -138,7 +140,7 @@ impl Expense {
     fn get_expense_list_from_psv(file_path: Option<&str>) -> ExpenseList {
         let mut expense_list = ExpenseList::new();
 
-        expense_list.load_expenses_from_psv(None).unwrap_or_else(|err| {
+        expense_list.load_expenses_from_psv(file_path).unwrap_or_else(|err| {
             eprintln!("Error : {}", err);
             exit(1);
         });
@@ -146,7 +148,7 @@ impl Expense {
         expense_list
     }
 
-    pub fn filter_expenses(filters: HashMap<String, String>) -> Result<(), Error>{
+    pub fn filter_expenses(filters: HashMap<String, String>) {
 
         let expense_list = Self::get_expense_list_from_psv(None);
 
@@ -156,11 +158,8 @@ impl Expense {
             amount_flag && category_flag
         });
         let x = filtered_list.collect::<Vec<&Expense>>();
-        // .collect::<Vec<&Expense>>();
 
         Self::display_expenses(x);
-
-        Ok(())
     }
     
 }
