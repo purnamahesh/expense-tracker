@@ -171,3 +171,12 @@ jobs:
         run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  github-release:
+    needs: [bump-version, publish]
+    if: needs.bump-version.outputs.new_version != ''
+    uses: ./.github/workflows/release-github.yml
+    permissions:
+      contents: write
+    with:
+      version: ${{ needs.bump-version.outputs.new_version }}

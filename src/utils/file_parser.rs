@@ -2,7 +2,7 @@ use std::io::{ErrorKind, Read};
 use std::fs::OpenOptions;
 use std::process::exit;
 
-use crate::config::{self, HEADER};
+use crate::config;
 
 pub fn read_file_content(file_path: Option<&str>) -> String {
     let path = file_path.unwrap_or(config::DEFAULT_PATH);
@@ -20,7 +20,10 @@ pub fn read_file_content(file_path: Option<&str>) -> String {
 
     let mut content = String::from("");
 
-    file.read_to_string(&mut content);
+    file.read_to_string(&mut content).unwrap_or_else(|err| {
+        eprintln!("Error reading file: {}", err);
+        exit(1);
+    });
 
     content
 }

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::process::exit;
 use std::env::args;
 use crate::utils::expense::Expense;
-use crate::utils::args_parser;
 
 pub fn filter_parse_args() -> HashMap<String, String> {
     let args:Vec<String> = args().collect();
@@ -25,12 +24,10 @@ pub fn filter_parse_args() -> HashMap<String, String> {
                     );
                 },
                 "--tags" => {
-                    eprintln!("tags are not filterable!"); // TODO
-                    exit(1);
-                    // filters.insert(
-                    //     "tag".to_string(), 
-                    //     args[i+1].trim().to_string()
-                    // );
+                    filters.insert(
+                        "tags".to_string(), 
+                        args[i+1].trim().to_string()
+                    );
                 },
                 "--description" => {
                     eprintln!("Description is not filterable!");
