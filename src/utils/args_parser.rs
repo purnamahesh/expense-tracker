@@ -24,12 +24,10 @@ pub fn filter_parse_args() -> HashMap<String, String> {
                     );
                 },
                 "--tags" => {
-                    eprintln!("tags are not filterable!"); // TODO
-                    exit(1);
-                    // filters.insert(
-                    //     "tag".to_string(), 
-                    //     args[i+1].trim().to_string()
-                    // );
+                    filters.insert(
+                        "tags".to_string(), 
+                        args[i+1].trim().to_string()
+                    );
                 },
                 "--description" => {
                     eprintln!("Description is not filterable!");

@@ -90,10 +90,10 @@ impl Expense {
     pub fn to_psv_record(&self) -> String {
         format!(
             "{}|{}|\"{}\"|\"{}\"\n", 
-            self.category.as_str(),
+            self.category.as_str().to_lowercase(),
             self.amount, 
             self.description.as_ref().unwrap_or(&"".to_string()), 
-            self.tags.join(",")
+            self.tags.join(",").to_lowercase()
         )
     }
 
@@ -153,9 +153,19 @@ impl Expense {
         let expense_list = Self::get_expense_list_from_psv(None);
 
         let filtered_list = expense_list.expense_list.iter().filter(|exp| {
-            let amount_flag = if filters.get("amount").is_some(){ filters.get("amount").unwrap().trim() == exp.amount.to_string() } else { true };
-            let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().trim() == exp.category } else { true };
-            amount_flag && category_flag
+            let amount_flag = if filters.get("amount").is_some(){ filters.get("amount").unwrap().as_str() == exp.amount.to_string() } else { true };
+            let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().as_str() == exp.category } else { true };
+            let tags_flag = if filters.get("tags").is_some() { 
+                let mut flag:bool = false;
+                if exp.tags.is_empty() { flag = false }
+                else {
+                    for tag in filters.get("tags").unwrap().to_lowercase().split('/') {
+                        flag = exp.tags.iter().map(|x| {println!("{}", x); x.as_str()}).collect::<Vec<&str>>().contains(&tag);
+                    }
+                }
+                flag
+            } else { true };
+            amount_flag && category_flag && tags_flag
         });
         let x = filtered_list.collect::<Vec<&Expense>>();
 
