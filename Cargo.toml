@@ -2,6 +2,24 @@
 name = "expense-tracker"
 version = "0.5.0"
 edition = "2024"
+description = """
+expense-tracker is a cli based tool to track expenses.
+"""
+readme = "README.md"
+documentation = "https://github.com/purnamahesh/expense-tracker"
+homepage = "https://github.com/purnamahesh/expense-tracker"
+repository = "https://github.com/purnamahesh/expense-tracker"
+keywords = ["expense", "tracker"]
+categories = ["command-line-utilities"]
+license = "GPL-3.0"
+license-file = "LICENSE"
+exclude = [
+  "/.github/",
+  "/hooks/",
+  "/.gitignore"
+]
+autotests = false
+rust-version = "1.90.0"
 
 [dependencies]
 chrono = "0.4.42"
