@@ -773,11 +773,53 @@ A shared workflow used by both `release.yml` and `pre-release.yml` to handle ver
 - **Consistency**: Both release and pre-release workflows use the same logic
 - **No Infinite Loops**: Version bump commits skip CI to prevent triggering another release
 
+### **Understanding `[skip ci]` in Workflows**
+
+The release workflows use `[skip ci]` to prevent infinite loops:
+
+**Syntax in `.github/workflows/release.yml`:**
+```yaml
+if: "!contains(github.event.head_commit.message, '[skip ci]')"
+```
+
+**How it works:**
+- `contains(X, Y)` - Returns `true` if X contains Y
+- `!` - Negation operator (NOT)
+- **Quoted** to prevent YAML parsing issues with `!`
+
+**What it prevents:**
+```
+Push → Trigger Release → Bump Version → Commit [skip ci] → Push
+                            ↑                                  |
+                            └──────────────────────────────────┘
+                            (This loop is prevented!)
+```
+
+**Example commit that gets skipped:**
+```bash
+chore: bump version 0.3.0 -> 0.4.0 [skip ci]
+```
+
+**Alternative Keywords:**
+- `[skip ci]`
+- `[ci skip]`
+- `[no ci]`
+- `[skip actions]`
+- `[actions skip]`
+
+All of these tell GitHub Actions to skip workflow runs for that commit.
+
+**Where it's used in this project:**
+1. **Version bump commits** - Prevents re-triggering release workflow
+2. **Documentation updates** - Can manually add to skip tests
+3. **CI configuration changes** - When you don't want to trigger full pipeline
+
 ### **Best Practices:**
 
 1. **Use Conventional Commits** for automatic version detection
 2. **Version changes create PRs** instead of direct commits for better traceability
 3. **Git tags are created** after PR merge to track version history
-4. Choose the method that fits your workflow:
+4. **`[skip ci]` is automatic** - Version bump workflows add it, you don't need to
+5. Choose the method that fits your workflow:
    - **GitHub Actions**: Best for team projects and CI/CD (creates PRs for review)
    - **Manual Script**: Best for controlled releases (direct local control)
