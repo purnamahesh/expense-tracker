@@ -3,8 +3,10 @@ use std::num::ParseFloatError;
 use std::{process::exit, vec, io::Write};
 use std::fs::OpenOptions;
 
+use chrono::{DateTime, Utc};
+
 use crate::utils::file_parser::read_file_content;
-use crate::config::DEFAULT_PATH;
+use crate::config::{DEFAULT_PATH, TIME_FORMAT};
 
 
 #[derive(Debug)]
@@ -12,8 +14,8 @@ pub struct Expense {
     amount: f64,
     description: Option<String>,
     category: String,
-    tags: Vec<String>
-    // ,datetime TODO
+    tags: Vec<String>,
+    datetime: DateTime<Utc>
 }
 
 pub struct ExpenseList {
@@ -32,11 +34,15 @@ impl ExpenseList {
             let fields:Vec<&str> = line.trim().split('|').collect() ;
             self.expense_list.push(
                 Expense {
-                    amount: fields[1].trim().parse::<f64>()?,
-                    description: Some(fields[2][1..fields[2].len()-1].to_owned()),
-                    category: fields[0].to_owned(), 
-                    tags: fields[3][1..fields[3].len()-1]
-                    .trim().split(',').map(|s| s.to_string()).collect()
+                    amount: fields[2].trim().parse::<f64>()?,
+                    description: Some(fields[3][1..fields[3].len()-1].to_owned()),
+                    category: fields[1].to_owned(), 
+                    tags: fields[4][1..fields[4].len()-1]
+                    .trim().split(',').map(|s| s.to_string()).collect(),
+                    datetime: DateTime::parse_from_str(&fields[0], TIME_FORMAT).unwrap_or_else(|err| {
+                        eprintln!("Error parsing date: {}", err);
+                        exit(1)
+                    }).to_utc()
                 }
             );
         }
@@ -53,7 +59,7 @@ impl Expense {
         if ! Self::validate_expense(amount, &category) {
             exit(1)
         }
-        Expense { amount: amount, description: description, category: category, tags: tags }
+        Expense { amount: amount, description: description, category: category, tags: tags, datetime: Utc::now() }
     }
 
     fn validate_expense(amount: f64, category: &str) -> bool {
@@ -89,7 +95,8 @@ impl Expense {
 
     pub fn to_psv_record(&self) -> String {
         format!(
-            "{}|{}|\"{}\"|\"{}\"\n", 
+            "{}|{}|{}|\"{}\"|\"{}\"\n", 
+            self.datetime.format(TIME_FORMAT).to_string(),
             self.category.as_str().to_lowercase(),
             self.amount, 
             self.description.as_ref().unwrap_or(&"".to_string()), 
@@ -99,11 +106,12 @@ impl Expense {
 
     pub fn display_expenses(expense_list: Vec<&Expense>
     ) {
-        println!("{:<20}{:<10}{:<50}{:<10}", "Category", "Amount", "Description", "Tags");
+        println!("{:<30}{:<20}{:<10}{:<50}{:<10}", "Time", "Category", "Amount", "Description", "Tags");
 
         for expense in expense_list.iter() {
             println!(
-                "{:<20}{:<10}{:<50}{:?}",
+                "{:<30}{:<20}{:<10}{:<50}{:?}",
+                expense.datetime.format(TIME_FORMAT).to_string(),
                 expense.category,
                 expense.amount, 
                 expense.description.as_ref().unwrap_or(&"".to_string()).as_str(), 

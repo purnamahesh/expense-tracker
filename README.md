@@ -36,6 +36,122 @@ This project is perfect because it's:
 
 ---
 
+## **Future Enhancements - Command Reference**
+
+### **Export to Multiple Formats**
+```bash
+# Export to JSON
+expense-tracker export --format json --output expenses.json
+
+# Export to CSV
+expense-tracker export --format csv --output expenses.csv
+
+# Export to HTML report
+expense-tracker export --format html --output report.html
+
+# Export filtered data
+expense-tracker export --format json --category food --output food-expenses.json
+```
+
+### **Database Encryption**
+```bash
+# Initialize encrypted database
+expense-tracker init --encrypt --password
+
+# Open with password
+expense-tracker --password="my-secret" list
+
+# Change encryption password
+expense-tracker encrypt --change-password
+
+# Export decrypted backup
+expense-tracker backup --output backup.db --decrypt
+```
+
+### **Enhanced UI - Tables & Coloring**
+```bash
+# Pretty table output with colors
+expense-tracker list --style fancy
+
+# Compact table
+expense-tracker list --style compact
+
+# ASCII borders only
+expense-tracker list --style ascii
+
+# Custom columns
+expense-tracker list --columns id,amount,category,date
+
+# Sort options
+expense-tracker list --sort-by amount --order desc
+
+# Show totals in table footer
+expense-tracker list --show-totals
+```
+
+### **Error Handling & Logging**
+```bash
+# Enable debug logging
+expense-tracker --log-level debug add --amount 50 --category food
+
+# Log to file
+expense-tracker --log-file ~/.expense-tracker/app.log list
+
+# Verbose error messages
+expense-tracker -v add --amount -10 --category food
+# Error: Invalid amount: must be positive
+#   at src/utils/expense.rs:45
+#   Suggestion: Use positive numbers for amounts
+
+# JSON error output (for scripting)
+expense-tracker --error-format json add --amount invalid
+```
+
+### **Multi-User Support**
+```bash
+# Create user
+expense-tracker user create --username john --email john@example.com
+
+# Login
+expense-tracker login --username john
+
+# Switch user
+expense-tracker --user alice list
+
+# List all users
+expense-tracker user list
+
+# User-specific database
+expense-tracker --user john add --amount 25 --category food
+
+# Shared expenses
+expense-tracker add --amount 100 --category rent --shared-with alice,bob
+
+# User statistics
+expense-tracker stats --user john --period monthly
+```
+
+
+### **Combined Examples**
+```bash
+# Export encrypted data for specific user with logging
+expense-tracker --user john --log-level info \
+  export --format json --decrypt --output john-backup.json
+
+# TUI with pretty colors and debug mode
+expense-tracker --log-level debug tui --style fancy
+
+# Multi-user report with HTML export
+expense-tracker stats --all-users --period yearly \
+  export --format html --output annual-report.html
+
+# Encrypted backup with compression
+expense-tracker backup --encrypt --compress \
+  --output ~/.backups/expenses-$(date +%Y%m%d).db.enc.gz
+```
+
+---
+
 ## **Getting Started**
 
 ### **1. Clone the Repository**

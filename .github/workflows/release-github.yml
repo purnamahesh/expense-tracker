@@ -1,0 +1,51 @@
+---
+name: Release - GitHub
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version for this release
+        required: true
+        type: string
+      artifact:
+        description: The name of the uploaded artifact
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  github:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        id: download
+        uses: actions/download-artifact@v5
+        if: inputs.artifact != ''
+        with:
+          name: ${{ inputs.artifact }}
+
+      - name: Create GitHub Release With Files
+        uses: softprops/action-gh-release@v2
+        if: inputs.artifact != ''
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Release v${{ inputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ${{ steps.download.outputs.download-path }}/*
+
+      - name: Create GitHub Release Without Files
+        uses: softprops/action-gh-release@v2
+        if: inputs.artifact == ''
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Release v${{ inputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
