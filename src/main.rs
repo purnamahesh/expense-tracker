@@ -1,8 +1,8 @@
-mod utils;
-mod config;
 mod cli;
+mod config;
+mod utils;
 
-use clap::{Parser};
+use clap::Parser;
 
 use crate::cli::parse_sub_commands;
 
