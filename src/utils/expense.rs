@@ -190,27 +190,25 @@ impl Expense {
         let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
 
             let amount_flag = if let Some(amount) = amount {
-                if amount == exp.amount { true } else { false }
+                amount == exp.amount
             } else { true };
 
             let category_flag = if let Some(category) = &category {
-                if category.as_str() == exp.category.as_str() { true } else { false }
+                category.as_str() == exp.category.as_str()
             } else { true };
 
-            let tags_flag = if tags.is_some() {
+            let tags_flag = if let Some(tags) = &tags {
                 let mut flag = false;
                 if exp.tags.is_empty() {
                     flag = false
                 } else {
-                    for tag in tags.as_ref().unwrap() {
+                    for tag in tags {
                         flag = exp.tags.contains(tag);
-                        // ::<Vec<&str>>().contains(tag.as_str());
                     }
                 }
                 flag
-            } else {
-                true
-            };
+            } else { true };
+
             amount_flag && category_flag && tags_flag
         });
         let x = filtered_list.collect::<Vec<_>>();
