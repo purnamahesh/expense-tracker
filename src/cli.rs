@@ -6,7 +6,6 @@ use crate::utils::expense::Expense;
 #[clap(author, version, about)]
 // #[command(about = "Does awesome things", long_about = None)]
 pub struct ExpenseTrackerArgs {
-    ///
     #[clap(subcommand)]
     pub command: Operation,
 }

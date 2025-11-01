@@ -42,7 +42,7 @@ impl ExpenseList {
                     .split(',')
                     .map(|s| s.to_string())
                     .collect(),
-                datetime: DateTime::parse_from_str(&fields[0], TIME_FORMAT)
+                datetime: DateTime::parse_from_str(fields[0], TIME_FORMAT)
                     .unwrap_or_else(|err| {
                         eprintln!("Error parsing date: {}", err);
                         exit(1)
@@ -63,10 +63,10 @@ impl Expense {
         tags: Option<Vec<String>>,
     ) -> Expense {
         Expense {
-            amount: amount,
-            description: description,
-            category: category,
-            tags: tags.unwrap_or(vec![]),
+            amount,
+            description,
+            category,
+            tags: tags.unwrap_or_default(),
             datetime: Utc::now(),
         }
     }
@@ -92,7 +92,7 @@ impl Expense {
     pub fn to_psv_record(&self) -> String {
         format!(
             "{}|{}|{}|\"{}\"|\"{}\"\n",
-            self.datetime.format(TIME_FORMAT).to_string(),
+            self.datetime.format(TIME_FORMAT),
             self.category.as_str().to_lowercase(),
             self.amount,
             self.description.as_ref().unwrap_or(&"".to_string()),
@@ -124,7 +124,7 @@ impl Expense {
 
     pub fn list_expenses() {
         let expense_list = Self::get_expense_list_from_psv(None);
-        let x = Vec::from_iter(expense_list.expense_list.iter().map(|x| x));
+        let x = Vec::from_iter(expense_list.expense_list.iter());
 
         Self::display_expenses(x);
     }
@@ -188,23 +188,22 @@ impl Expense {
         let expense_list = Self::get_expense_list_from_psv(None);
 
         let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
-            let amount_flag = if amount.is_some() {
-                amount.unwrap() == exp.amount
-            } else {
-                true
-            };
-            let category_flag = if category.is_some() {
-                category.as_ref().unwrap() == exp.category.as_str()
-            } else {
-                true
-            };
+
+            let amount_flag = if let Some(amount) = amount {
+                if amount == exp.amount { true } else { false }
+            } else { true };
+
+            let category_flag = if let Some(category) = &category {
+                if category.as_str() == exp.category.as_str() { true } else { false }
+            } else { true };
+
             let tags_flag = if tags.is_some() {
                 let mut flag = false;
                 if exp.tags.is_empty() {
                     flag = false
                 } else {
                     for tag in tags.as_ref().unwrap() {
-                        flag = exp.tags.contains(&tag);
+                        flag = exp.tags.contains(tag);
                         // ::<Vec<&str>>().contains(tag.as_str());
                     }
                 }
