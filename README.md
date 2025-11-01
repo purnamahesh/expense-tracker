@@ -1,6 +1,8 @@
-Here's a great beginner Rust project for you:
-
 ## **Personal Expense Tracker (CLI)**
+
+> **Current Status:** Active development on `feature/clap` branch
+> **Version:** 0.5.2
+> **Latest Update:** Migrating to `clap` for CLI argument parsing
 
 **Project Goal:** Build a command-line application that helps track personal expenses.
 
@@ -18,14 +20,48 @@ Here's a great beginner Rust project for you:
 - Pattern matching with `match`
 - File I/O operations
 - Error handling with `Result`
-- Parsing command-line arguments (you can use the `clap` crate or just `std::env::args()`)
+- ✅ **Parsing command-line arguments using `clap` crate** (implemented with derive macros)
 
 **Example Usage:**
-```
-$ expense-tracker add --description "Lunch" --amount 12.50 --category food
+```bash
+# Add expense with tags
+$ expense-tracker add --amount 12.50 --category food --description "Lunch" --tag meal --tag restaurant
+
+# List all expenses
 $ expense-tracker list
+
+# Calculate total spending
 $ expense-tracker total
+
+# Filter expenses by category
 $ expense-tracker filter --category food
+
+# Filter by amount
+$ expense-tracker filter --amount 50.0
+
+# Filter by tags
+$ expense-tracker filter --tag food --tag coffee
+```
+
+**Current Implementation (v0.5.2):**
+- ✅ **Clap-based CLI** - Modern argument parsing with derive macros (`src/cli.rs`)
+- ✅ **Subcommands** - `add`, `list`, `total`, `filter`
+- ✅ **Type-safe arguments** - Validated by clap at compile time
+- ✅ **DateTime tracking** - Automatic timestamp for each expense
+- ✅ **Multi-tag support** - Multiple tags per expense
+- ✅ **PSV storage** - Pipe-separated values format
+- 🚧 **SQLite migration** - Planned future enhancement
+
+**Project Structure:**
+```
+src/
+├── main.rs           # Entry point
+├── cli.rs            # Clap CLI definitions (NEW!)
+├── config.rs         # Configuration constants
+├── utils.rs          # Module declarations
+└── utils/
+    ├── expense.rs    # Expense struct and logic
+    └── file_parser.rs # File I/O operations
 ```
 
 This project is perfect because it's:
@@ -823,3 +859,234 @@ All of these tell GitHub Actions to skip workflow runs for that commit.
 5. Choose the method that fits your workflow:
    - **GitHub Actions**: Best for team projects and CI/CD (creates PRs for review)
    - **Manual Script**: Best for controlled releases (direct local control)
+
+---
+
+## **Documentation**
+
+This project includes automated documentation generation using Rust's built-in `rustdoc` tool.
+
+### **GitHub Actions Workflow** (`.github/workflows/docs.yml`)
+
+**Triggers:**
+- ~~Push to main/master~~ (currently disabled - commented out in workflow)
+- Pull requests to main/master (for doc validation)
+- Manual workflow dispatch
+
+**Features:**
+- ✓ **Auto-generates documentation** from code comments
+- ✓ **Commits to `docs/` directory** automatically (when enabled)
+- ✓ **Publishes to GitHub Pages** from `docs/` folder
+- ✓ **Checks broken links** in pull requests
+- ✓ **Documents private items** for comprehensive coverage
+- ✓ **PR comments** with documentation build status
+- ✓ **Includes `[skip ci]`** to prevent infinite loops
+
+> **Note:** Push triggers are currently commented out. The workflow only runs on:
+> 1. Pull requests (validation only)
+> 2. Manual dispatch
+
+**Setup GitHub Pages:**
+1. Go to repository Settings → Pages
+2. Source: "Deploy from a branch"
+3. Branch: `main` (or `master`) and `/docs` folder
+4. Click "Save"
+5. Documentation will be available at: `https://[username].github.io/[repo-name]/`
+
+**How it works:**
+```
+Push to main → Build docs → Copy to docs/ → Commit [skip ci] → Push
+                                                                    ↓
+                                                          GitHub Pages serves docs/
+```
+
+**Pull Request Checks:**
+
+When you open a PR, the workflow automatically:
+- Builds documentation to check for errors
+- Validates intra-doc links
+- Posts a comment with the status
+
+### **Local Documentation Script** (`generate-docs.sh`)
+
+Interactive script for generating documentation locally.
+
+**Usage:**
+```bash
+./generate-docs.sh
+```
+
+**Options:**
+1. **Generate documentation (HTML)** - Basic doc generation
+2. **Generate and open in browser** - Build and open automatically
+3. **Generate with private items** - Include private functions/structs
+4. **Check for broken doc links** - Validate all documentation links
+5. **Run doc tests** - Execute code examples in documentation
+6. **Generate JSON documentation** - Machine-readable format (requires nightly)
+7. **Clean documentation** - Remove generated docs
+8. **Exit**
+
+**Quick Commands:**
+```bash
+# Generate and open docs
+cargo doc --open
+
+# Generate with private items
+cargo doc --document-private-items
+
+# Check for broken links
+cargo rustdoc -- -D warnings
+
+# Run doc tests
+cargo test --doc
+
+# Clean docs
+cargo clean --doc
+```
+
+### **Documentation Template** (`docs-template.md`)
+
+Reference guide for writing documentation comments in Rust.
+
+**Example Module Documentation:**
+```rust
+//! Module for expense tracking.
+//!
+//! This module provides functionality for managing expenses
+//! including creation, filtering, and persistence.
+
+/// Represents a single expense entry.
+///
+/// # Fields
+///
+/// * `amount` - The expense amount (must be positive)
+/// * `category` - Expense category (e.g., "food", "transport")
+///
+/// # Examples
+///
+/// ```
+/// use expense_tracker::Expense;
+///
+/// let expense = Expense::new(
+///     50.0,
+///     Some("Lunch".to_string()),
+///     "food".to_string(),
+///     vec![]
+/// );
+/// ```
+pub struct Expense {
+    pub amount: f64,
+    pub category: String,
+    // ...
+}
+```
+
+**Documentation Guidelines:**
+- Use `///` for item documentation (functions, structs, enums)
+- Use `//!` for module documentation (top of files)
+- Include `# Examples` sections with code
+- Document public APIs thoroughly
+- Cross-reference with `[Type]` or `[function_name]`
+
+### **Documentation Structure**
+
+```
+docs/                        # Committed to repository
+├── expense_tracker/          # Main crate documentation
+│   ├── index.html           # Crate overview
+│   ├── utils/               # Utils module docs
+│   │   ├── expense/         # Expense module
+│   │   ├── args_parser/     # CLI parser
+│   │   └── file_parser/     # File I/O
+│   └── config/              # Config module
+├── search-index.js          # Search functionality
+├── index.html              # Redirect to crate docs
+└── .nojekyll               # Tells GitHub Pages not to use Jekyll
+
+target/doc/                  # Local build (not committed)
+└── (same structure as docs/)
+```
+
+**Viewing Documentation:**
+```bash
+# Local (after running cargo doc)
+open target/doc/expense_tracker/index.html
+
+# Or use cargo
+cargo doc --open
+
+# Local (view committed docs)
+open docs/index.html
+
+# GitHub Pages (after setup)
+# https://[username].github.io/expense-tracker/
+```
+
+**Note:** The `docs/` directory will be automatically generated and committed by the workflow when push triggers are enabled. Do not manually edit files in `docs/` as they will be overwritten.
+
+**To Generate Docs Manually:**
+```bash
+# Generate locally
+cargo doc --no-deps --document-private-items --all-features
+
+# Copy to docs/ directory
+rm -rf docs
+cp -r target/doc docs
+touch docs/.nojekyll
+
+# Commit to repository
+git add docs/
+git commit -m "docs: update documentation [skip ci]"
+git push
+```
+
+---
+
+## **Repository Status Summary**
+
+### **Current Branch:** `feature/clap`
+
+**Recent Changes (Uncommitted):**
+- ✅ Migrated to `clap` for CLI argument parsing
+- ✅ Added `src/cli.rs` with derive-based CLI definitions
+- ✅ Removed old `src/utils/args_parser.rs`
+- ✅ Updated dependencies: `clap = "4.5.51"`
+- ✅ Version bumped to 0.5.2
+- ✅ Created documentation generation workflow
+- ✅ Created `generate-docs.sh` script
+- ✅ Created `docs-template.md` reference guide
+
+**New Files Added:**
+```
+.github/workflows/docs.yml     # Documentation generation workflow
+generate-docs.sh               # Interactive doc generation script
+docs-template.md               # Documentation writing guide
+src/cli.rs                     # Clap CLI definitions
+```
+
+**Files Modified:**
+```
+Cargo.toml                     # Added clap dependency
+src/main.rs                    # Updated to use clap
+src/utils/expense.rs          # Updated for clap integration
+src/utils/file_parser.rs      # Various improvements
+README.md                      # This file - comprehensive updates
+```
+
+**Files Removed:**
+```
+src/utils/args_parser.rs      # Replaced by src/cli.rs (clap-based)
+```
+
+**Dependencies:**
+- `chrono = "0.4.42"` - DateTime handling
+- `clap = { version = "4.5.51", features = ["derive"] }` - CLI parsing ✨ NEW
+
+**Next Steps:**
+1. Test the clap implementation thoroughly
+2. Commit changes to `feature/clap` branch
+3. Create PR to merge into `master`
+4. Consider enabling docs workflow push triggers
+5. Plan SQLite migration (future enhancement)
+
+---
