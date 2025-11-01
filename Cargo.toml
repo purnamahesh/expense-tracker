@@ -11,7 +11,6 @@ homepage = "https://github.com/purnamahesh/expense-tracker"
 repository = "https://github.com/purnamahesh/expense-tracker"
 keywords = ["expense", "tracker"]
 categories = ["command-line-utilities"]
-license = "GPL-3.0"
 license-file = "LICENSE"
 exclude = [
   "/.github/",
@@ -23,3 +22,4 @@ rust-version = "1.90.0"
 
 [dependencies]
 chrono = "0.4.42"
+clap = { version = "4.5.51", features = ["derive"] }

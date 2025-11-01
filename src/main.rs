@@ -1,8 +1,13 @@
-pub mod utils;
-pub mod config;
+mod utils;
+mod config;
+mod cli;
 
-use crate::utils::{args_parser::parse_args};
+use clap::{Parser};
+
+use crate::cli::parse_sub_commands;
 
 fn main() {
-    parse_args();
+    let args = cli::ExpenseTrackerArgs::parse();
+
+    parse_sub_commands(args);
 }

@@ -11,7 +11,7 @@ pub fn read_file_content(file_path: Option<&str>) -> String {
     .open(path)
     .unwrap_or_else(|err| 
         if err.kind() == ErrorKind::NotFound {
-            println!("No records yet at {}", path);
+            eprintln!("No records yet at {}", path);
             exit(0);
         } else {
             panic!("Error: {}", err)

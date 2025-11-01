@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::num::ParseFloatError;
 use std::{process::exit, vec, io::Write};
 use std::fs::OpenOptions;
@@ -9,13 +8,12 @@ use crate::utils::file_parser::read_file_content;
 use crate::config::{DEFAULT_PATH, TIME_FORMAT};
 
 
-#[derive(Debug)]
 pub struct Expense {
     amount: f64,
-    description: Option<String>,
     category: String,
     tags: Vec<String>,
-    datetime: DateTime<Utc>
+    datetime: DateTime<Utc>,
+    description: Option<String>,
 }
 
 pub struct ExpenseList {
@@ -55,23 +53,14 @@ impl ExpenseList {
 
 impl Expense {
 
-    pub fn new(amount:f64, description:Option<String>, category:String, tags:Vec<String>) -> Expense {
-        if ! Self::validate_expense(amount, &category) {
-            exit(1)
+    pub fn new(amount:f64, description:Option<String>, category:String, tags:Option<Vec<String>>) -> Expense {
+        Expense {
+            amount: amount, 
+            description: description, 
+            category: category, 
+            tags: tags.unwrap_or(vec![]), 
+            datetime: Utc::now()
         }
-        Expense { amount: amount, description: description, category: category, tags: tags, datetime: Utc::now() }
-    }
-
-    fn validate_expense(amount: f64, category: &str) -> bool {
-        if amount == 0.0 {
-            eprintln!("Amount is required!") ;
-            return false;
-        }
-        else if category == "" {
-            eprintln!("category is required!");
-            return false;
-        }
-        return true;
     }
 
     pub fn write_expense_to_psv(&self, file_path: Option<&str>) {
@@ -156,26 +145,52 @@ impl Expense {
         expense_list
     }
 
-    pub fn filter_expenses(filters: HashMap<String, String>) {
+    // pub fn filter_expenses(filters: HashMap<String, String>) {
+
+    //     let expense_list = Self::get_expense_list_from_psv(None);
+
+    //     let filtered_list = expense_list.expense_list.iter().filter(|exp| {
+    //         let amount_flag = if filters.get("amount").is_some(){ filters.get("amount").unwrap().as_str() == exp.amount.to_string() } else { true };
+    //         let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().as_str() == exp.category } else { true };
+    //         let tags_flag = if filters.get("tags").is_some() { 
+    //             let mut flag:bool = false;
+    //             if exp.tags.is_empty() { flag = false }
+    //             else {
+    //                 for tag in filters.get("tags").unwrap().to_lowercase().split('/') {
+    //                     flag = exp.tags.iter().map(|x| {println!("{}", x); x.as_str()}).collect::<Vec<&str>>().contains(&tag);
+    //                 }
+    //             }
+    //             flag
+    //         } else { true };
+    //         amount_flag && category_flag && tags_flag
+    //     });
+    //     let x = filtered_list.collect::<Vec<&Expense>>();
+
+    //     Self::display_expenses(x);
+    // }
+
+    pub fn filter_expenses(category: Option<String>, tags: Option<Vec<String>>, amount:Option<f64>) {
 
         let expense_list = Self::get_expense_list_from_psv(None);
 
-        let filtered_list = expense_list.expense_list.iter().filter(|exp| {
-            let amount_flag = if filters.get("amount").is_some(){ filters.get("amount").unwrap().as_str() == exp.amount.to_string() } else { true };
-            let category_flag = if filters.get("category").is_some(){ filters.get("category").unwrap().as_str() == exp.category } else { true };
-            let tags_flag = if filters.get("tags").is_some() { 
-                let mut flag:bool = false;
+        let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
+            
+            let amount_flag = if amount.is_some(){ amount.unwrap() == exp.amount } else { true };
+            let category_flag = if category.is_some(){ category.as_ref().unwrap() == exp.category.as_str() } else { true };
+            let tags_flag = if tags.is_some() { 
+                let mut flag = false;
                 if exp.tags.is_empty() { flag = false }
                 else {
-                    for tag in filters.get("tags").unwrap().to_lowercase().split('/') {
-                        flag = exp.tags.iter().map(|x| {println!("{}", x); x.as_str()}).collect::<Vec<&str>>().contains(&tag);
+                    for tag in tags.as_ref().unwrap() {
+                        flag = exp.tags.contains(&tag);
+                        // ::<Vec<&str>>().contains(tag.as_str());
                     }
                 }
                 flag
             } else { true };
             amount_flag && category_flag && tags_flag
         });
-        let x = filtered_list.collect::<Vec<&Expense>>();
+        let x = filtered_list.collect::<Vec<_>>();
 
         Self::display_expenses(x);
     }
