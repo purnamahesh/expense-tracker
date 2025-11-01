@@ -75,6 +75,10 @@ jobs:
     name: Check Documentation
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -85,9 +89,13 @@ jobs:
           toolchain: stable
 
       - name: Check documentation builds without errors
+        id: doc_check
+        continue-on-error: true
         run: cargo doc --no-deps --document-private-items --all-features
 
       - name: Check for broken intra-doc links
+        id: link_check
+        continue-on-error: true
         run: |
           cargo rustdoc --all-features -- -D warnings
 
@@ -95,9 +103,13 @@ jobs:
         if: always()
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const status = '${{ job.status }}';
-            const body = status === 'success'
+            const docCheck = '${{ steps.doc_check.outcome }}';
+            const linkCheck = '${{ steps.link_check.outcome }}';
+            const success = docCheck === 'success' && linkCheck === 'success';
+
+            const body = success
               ? '✅ **Documentation Check Passed**\n\nDocumentation builds successfully without errors or warnings.'
               : '❌ **Documentation Check Failed**\n\nPlease fix documentation errors before merging. Check the workflow logs for details.';
 
@@ -107,3 +119,8 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+
+            // Fail the job if checks failed
+            if (!success) {
+              core.setFailed('Documentation checks failed');
+            }
