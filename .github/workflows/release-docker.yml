@@ -1,0 +1,264 @@
+---
+name: Docker Release
+# Reusable workflow for building and pushing Docker images
+# Supports both pre-release and stable release tagging strategies:
+# - Pre-release versions (e.g., 1.0.0-alpha.0, 1.0.0-beta.1, 1.0.0-rc.2): Tagged with exact version only
+# - Stable releases (e.g., 1.0.0): Tagged with version, major.minor, and major
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: 'The name of the image to create (without registry), e.g. "expense-tracker"'
+        required: true
+        type: string
+      version:
+        description: 'The semantic version of the image, e.g. 2.12.8'
+        required: true
+        type: string
+      dockerfile-path:
+        description: 'Path to the dockerfile'
+        required: false
+        default: 'Dockerfile'
+        type: string
+      docker-context:
+        description: 'The context for the build command'
+        required: false
+        default: '.'
+        type: string
+      latest-tag:
+        description: 'Whether to tag this image with "latest" (auto/true/false)'
+        required: false
+        default: 'auto'
+        type: string
+      build-args:
+        description: 'A newline-delimited list of build args'
+        required: false
+        default: ''
+        type: string
+      no-cache:
+        description: 'Ignore cache when building the image'
+        default: false
+        required: false
+        type: boolean
+      push:
+        description: 'Push image to registry'
+        default: true
+        required: false
+        type: boolean
+      platforms:
+        description: 'Target platforms for multi-arch builds (e.g., "linux/amd64,linux/arm64")'
+        required: false
+        default: 'linux/amd64'
+        type: string
+      docker-registry:
+        description: 'Docker registry (ghcr.io or docker.io)'
+        required: false
+        default: 'ghcr.io'
+        type: string
+      docker-username:
+        description: 'Docker registry username (leave empty to use github.actor for ghcr.io)'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      DOCKER_PASSWORD:
+        description: 'Docker registry password/token (for ghcr.io, use GITHUB_TOKEN)'
+        required: false
+
+    outputs:
+      image-tags:
+        description: 'The full image tags that were built'
+        value: ${{ jobs.docker.outputs.image-tags }}
+      image-digest:
+        description: 'The image digest'
+        value: ${{ jobs.docker.outputs.image-digest }}
+
+permissions:
+  contents: read     # Read Dockerfile and context
+  packages: write    # Push Docker images to GHCR
+  id-token: write    # For provenance
+
+jobs:
+  docker:
+    name: Build ${{ inputs.image-name }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: docker-${{ github.ref }}-${{ inputs.image-name }}
+      cancel-in-progress: true
+    outputs:
+      image-tags: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ inputs.platforms }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine registry and username
+        id: registry-config
+        run: |
+          REGISTRY="${{ inputs.docker-registry }}"
+          USERNAME="${{ inputs.docker-username }}"
+
+          # Default username for ghcr.io
+          if [ "$REGISTRY" = "ghcr.io" ] && [ -z "$USERNAME" ]; then
+            USERNAME="${{ github.actor }}"
+          fi
+
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+          echo "username=$USERNAME" >> $GITHUB_OUTPUT
+
+          # Construct full image name
+          if [ "$REGISTRY" = "ghcr.io" ]; then
+            # For GHCR, use repository owner/name
+            IMAGE_PATH="${{ github.repository_owner }}/${{ inputs.image-name }}"
+          else
+            # For Docker Hub or others, use username/image-name
+            IMAGE_PATH="$USERNAME/${{ inputs.image-name }}"
+          fi
+          echo "image-path=$IMAGE_PATH" >> $GITHUB_OUTPUT
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.registry-config.outputs.registry }}
+          username: ${{ steps.registry-config.outputs.username }}
+          password: ${{ secrets.DOCKER_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Determine latest tag behavior
+        id: latest-tag
+        run: |
+          LATEST_BEHAVIOR="${{ inputs.latest-tag }}"
+          VERSION="${{ inputs.version }}"
+
+          if [ "$LATEST_BEHAVIOR" = "auto" ]; then
+            # Auto: only stable releases get 'latest' tag
+            # Check for SemVer pre-release format: -alpha, -beta, -rc
+            if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+              echo "enabled=false" >> $GITHUB_OUTPUT
+            else
+              echo "enabled=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "enabled=$LATEST_BEHAVIOR" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Docker tags
+        id: tags
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          REGISTRY="${{ steps.registry-config.outputs.registry }}"
+          IMAGE_PATH="${{ steps.registry-config.outputs.image-path }}"
+
+          # Start with the full version tag
+          TAGS="${REGISTRY}/${IMAGE_PATH}:${VERSION}"
+
+          # For stable releases (not pre-release), add major.minor and major tags
+          # Check for SemVer pre-release format: -alpha, -beta, -rc
+          if [[ ! "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            # Extract major.minor
+            MAJOR_MINOR=$(echo "$VERSION" | grep -oE '^[0-9]+\.[0-9]+')
+            if [ -n "$MAJOR_MINOR" ]; then
+              TAGS="${TAGS}
+          ${REGISTRY}/${IMAGE_PATH}:${MAJOR_MINOR}"
+            fi
+
+            # Extract major
+            MAJOR=$(echo "$VERSION" | grep -oE '^[0-9]+')
+            if [ -n "$MAJOR" ]; then
+              TAGS="${TAGS}
+          ${REGISTRY}/${IMAGE_PATH}:${MAJOR}"
+            fi
+          fi
+
+          # Add latest tag if enabled
+          if [ "${{ steps.latest-tag.outputs.enabled }}" = "true" ]; then
+            TAGS="${TAGS}
+          ${REGISTRY}/${IMAGE_PATH}:latest"
+          fi
+
+          # Output tags
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "Generated tags:"
+          echo "$TAGS"
+
+      - name: Generate Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ steps.registry-config.outputs.registry }}/${{ steps.registry-config.outputs.image-path }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=semver,pattern={{version}},value=${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }},enable=${{ !contains(inputs.version, '-alpha') && !contains(inputs.version, '-beta') && !contains(inputs.version, '-rc') }}
+            type=semver,pattern={{major}},value=${{ inputs.version }},enable=${{ !contains(inputs.version, '-alpha') && !contains(inputs.version, '-beta') && !contains(inputs.version, '-rc') }}
+          flavor: |
+            latest=${{ steps.latest-tag.outputs.enabled }}
+          labels: |
+            org.opencontainers.image.title=${{ inputs.image-name }}
+            org.opencontainers.image.description=Rust application: ${{ inputs.image-name }}
+            org.opencontainers.image.version=${{ inputs.version }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.docker-context }}
+          file: ${{ inputs.dockerfile-path }}
+          build-args: ${{ inputs.build-args }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache: ${{ inputs.no-cache }}
+          provenance: true
+          sbom: true
+
+      - name: Output image information
+        run: |
+          echo "### Docker Image Built Successfully! 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** ${{ inputs.platforms }}" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Scan image for vulnerabilities
+  scan:
+    name: Security Scan
+    needs: docker
+    if: inputs.push == true
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.docker.outputs.image-tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
