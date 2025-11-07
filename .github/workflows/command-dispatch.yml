@@ -1,0 +1,380 @@
+---
+name: PR Command Dispatch
+# Workflow for handling slash commands in PR comments
+# Supports: /pre-release, /test, /docs
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write       # Trigger workflows on PR branch
+  actions: write        # Dispatch workflows
+  pull-requests: write  # Comment on PRs
+  checks: write         # Update check status
+
+jobs:
+  # ============================================
+  # Parse Command and Extract Arguments
+  # ============================================
+  parse-command:
+    name: Parse Command
+    if: |
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+    outputs:
+      command: ${{ steps.parse.outputs.command }}
+      args-json: ${{ steps.parse.outputs.args-json }}
+      pr-branch: ${{ steps.pr-info.outputs.branch }}
+      pr-number: ${{ steps.pr-info.outputs.number }}
+      pr-sha: ${{ steps.pr-info.outputs.sha }}
+      is-valid: ${{ steps.parse.outputs.is-valid }}
+    steps:
+      - name: Check user permissions
+        id: check-permissions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+
+            const allowedLevels = ['write', 'maintain', 'admin'];
+            const hasPermission = allowedLevels.includes(permission.permission);
+
+            core.setOutput('has-permission', hasPermission);
+            core.setOutput('permission-level', permission.permission);
+
+            if (!hasPermission) {
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: 'confused'
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `❌ @${context.actor} does not have permission to run commands. Required: write, maintain, or admin. Current: ${permission.permission}`
+              });
+            }
+
+            return hasPermission;
+
+      - name: Get PR information
+        if: steps.check-permissions.outputs.has-permission == 'true'
+        id: pr-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            core.setOutput('branch', pr.data.head.ref);
+            core.setOutput('number', context.issue.number);
+            core.setOutput('sha', pr.data.head.sha);
+
+            return {
+              branch: pr.data.head.ref,
+              number: context.issue.number,
+              sha: pr.data.head.sha
+            };
+
+      - name: Parse command and arguments
+        if: steps.check-permissions.outputs.has-permission == 'true'
+        id: parse
+        shell: bash
+        run: |
+          # Extract first line of comment
+          COMMENT_BODY='${{ github.event.comment.body }}'
+          FIRST_LINE=$(echo "$COMMENT_BODY" | head -n 1)
+
+          # Extract command (first word after /)
+          COMMAND=$(echo "$FIRST_LINE" | awk '{print $1}' | sed 's/^\///')
+
+          # Extract remaining arguments
+          ARGS=$(echo "$FIRST_LINE" | cut -d' ' -f2- 2>/dev/null || echo "")
+
+          # Validate command
+          VALID_COMMANDS="pre-release test docs"
+          if echo "$VALID_COMMANDS" | grep -qw "$COMMAND"; then
+            IS_VALID="true"
+          else
+            IS_VALID="false"
+          fi
+
+          echo "command=$COMMAND" >> $GITHUB_OUTPUT
+          echo "is-valid=$IS_VALID" >> $GITHUB_OUTPUT
+
+          # Parse arguments into JSON
+          # Format: /command arg1 arg2 key=value key2="value with spaces"
+          UNNAMED_ARGS=()
+          declare -A NAMED_ARGS
+
+          # Parse arguments
+          if [ -n "$ARGS" ]; then
+            # Temporary file for parsing
+            echo "$ARGS" > /tmp/args.txt
+
+            # Read arguments
+            while IFS= read -r line; do
+              # Split by spaces (respecting quotes)
+              eval "arr=($line)"
+              for arg in "${arr[@]}"; do
+                if [[ "$arg" =~ ^([a-zA-Z0-9_-]+)=(.+)$ ]]; then
+                  # Named argument
+                  key="${BASH_REMATCH[1]}"
+                  value="${BASH_REMATCH[2]}"
+                  # Remove quotes if present
+                  value=$(echo "$value" | sed 's/^"\(.*\)"$/\1/' | sed "s/^'\(.*\)'$/\1/")
+                  NAMED_ARGS["$key"]="$value"
+                else
+                  # Unnamed argument
+                  UNNAMED_ARGS+=("$arg")
+                fi
+              done
+            done < /tmp/args.txt
+          fi
+
+          # Build JSON output
+          JSON='{'
+
+          # Add unnamed args
+          JSON+='"unnamed":['
+          first=true
+          for arg in "${UNNAMED_ARGS[@]}"; do
+            if [ "$first" = true ]; then
+              first=false
+            else
+              JSON+=','
+            fi
+            JSON+="\"$arg\""
+          done
+          JSON+='],'
+
+          # Add named args
+          JSON+='"named":{'
+          first=true
+          for key in "${!NAMED_ARGS[@]}"; do
+            if [ "$first" = true ]; then
+              first=false
+            else
+              JSON+=','
+            fi
+            JSON+="\"$key\":\"${NAMED_ARGS[$key]}\""
+          done
+          JSON+='}'
+
+          JSON+='}'
+
+          echo "args-json=$JSON" >> $GITHUB_OUTPUT
+
+          # Debug output
+          echo "### Command Parsed" >> $GITHUB_STEP_SUMMARY
+          echo "- Command: \`$COMMAND\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Valid: \`$IS_VALID\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Arguments: \`$JSON\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: React to valid command
+        if: steps.check-permissions.outputs.has-permission == 'true' && steps.parse.outputs.is-valid == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: React to invalid command
+        if: steps.check-permissions.outputs.has-permission == 'true' && steps.parse.outputs.is-valid == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ Unknown command: \`/${{ steps.parse.outputs.command }}\`\n\nAvailable commands:\n- \`/pre-release [alpha|beta|rc]\`\n- \`/test [rust-version=stable|beta|nightly]\`\n- \`/docs\``
+            });
+
+  # ============================================
+  # Command: /pre-release
+  # ============================================
+  pre-release:
+    name: Pre-release
+    needs: parse-command
+    if: |
+      needs.parse-command.outputs.is-valid == 'true' &&
+      needs.parse-command.outputs.command == 'pre-release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse pre-release arguments
+        id: args
+        shell: bash
+        run: |
+          ARGS_JSON='${{ needs.parse-command.outputs.args-json }}'
+
+          # Extract values using jq
+          TYPE=$(echo "$ARGS_JSON" | jq -r '.unnamed[0] // "alpha"')
+
+          # Validate type
+          if [[ ! "$TYPE" =~ ^(alpha|beta|rc)$ ]]; then
+            TYPE="alpha"
+          fi
+
+          echo "type=$TYPE" >> $GITHUB_OUTPUT
+
+      - name: Trigger pre-release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'pre-release.yml',
+              ref: '${{ needs.parse-command.outputs.pr-branch }}',
+              inputs: {
+                'prerelease-type': '${{ steps.args.outputs.type }}'
+              }
+            });
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `🚀 **Pre-release triggered**
+
+            **Configuration:**
+            - Type: \`${{ steps.args.outputs.type }}\`
+            - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
+            - Commit: \`${{ needs.parse-command.outputs.pr-sha }}\`
+
+            [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.parse-command.outputs.pr-number }},
+              body: body
+            });
+
+  # ============================================
+  # Command: /test
+  # ============================================
+  test:
+    name: Test
+    needs: parse-command
+    if: |
+      needs.parse-command.outputs.is-valid == 'true' &&
+      needs.parse-command.outputs.command == 'test'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse test arguments
+        id: args
+        shell: bash
+        run: |
+          ARGS_JSON='${{ needs.parse-command.outputs.args-json }}'
+
+          # Extract values using jq
+          RUST_VERSION=$(echo "$ARGS_JSON" | jq -r '.named["rust-version"] // "stable"')
+          RUN_COVERAGE=$(echo "$ARGS_JSON" | jq -r '.named["run-coverage"] // "true"')
+
+          # Validate rust version
+          if [[ ! "$RUST_VERSION" =~ ^(stable|beta|nightly)$ ]]; then
+            RUST_VERSION="stable"
+          fi
+
+          echo "rust-version=$RUST_VERSION" >> $GITHUB_OUTPUT
+          echo "run-coverage=$RUN_COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Trigger test workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'test.yml',
+              ref: '${{ needs.parse-command.outputs.pr-branch }}',
+              inputs: {
+                'skip_tests': 'false',
+                'run_coverage': '${{ steps.args.outputs.run-coverage }}'
+              }
+            });
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `🧪 **Test workflow triggered**
+
+            **Configuration:**
+            - Rust Version: \`${{ steps.args.outputs.rust-version }}\`
+            - Run Coverage: \`${{ steps.args.outputs.run-coverage }}\`
+            - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
+
+            [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.parse-command.outputs.pr-number }},
+              body: body
+            });
+
+  # ============================================
+  # Command: /docs
+  # ============================================
+  docs:
+    name: Documentation
+    needs: parse-command
+    if: |
+      needs.parse-command.outputs.is-valid == 'true' &&
+      needs.parse-command.outputs.command == 'docs'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docs.yml',
+              ref: '${{ needs.parse-command.outputs.pr-branch }}'
+            });
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `📚 **Documentation workflow triggered**
+
+            **Configuration:**
+            - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
+
+            [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.parse-command.outputs.pr-number }},
+              body: body
+            });
