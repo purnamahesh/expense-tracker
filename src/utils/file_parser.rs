@@ -1,17 +1,18 @@
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read};
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use crate::config;
+use crate::config::FILE_NAME;
 
-pub fn read_file_content(file_path: Option<&str>) -> String {
-    let path = file_path.unwrap_or(config::DEFAULT_PATH);
+pub fn read_file_content(file_path: Option<PathBuf>) -> String {
+    let path = file_path.unwrap_or(Path::new(FILE_NAME).to_path_buf());
     let mut file = OpenOptions::new()
         .read(true)
-        .open(path)
+        .open(&path)
         .unwrap_or_else(|err| {
             if err.kind() == ErrorKind::NotFound {
-                eprintln!("No records yet at {}", path);
+                eprintln!("No records yet at {}", path.display());
                 exit(0);
             } else {
                 eprintln!("Error : {}", err);

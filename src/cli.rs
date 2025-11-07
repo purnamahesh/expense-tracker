@@ -1,24 +1,19 @@
-use std::{
-    env::{self, home_dir},
-    path::{Path, PathBuf},
-    process::exit,
-};
+use std::{path::PathBuf, process::exit};
 
 use clap::{self, Args, Parser, Subcommand};
 
-use std::path::absolute;
-
 use crate::utils::expense::Expense;
+use crate::utils::path::construct_abs_path;
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about)]
+// #[clap(author, version, about)]
 // #[command(about = "Does awesome things", long_about = None)]
 pub struct ExpenseTrackerArgs {
     #[clap(subcommand)]
     pub command: Operation,
-    // Custom path to psv file where records should be saved
+    /// Custom path to psv file where records should be saved.
     #[arg(short='p', long, value_parser = validate_file_path)]
-    pub records_path: PathBuf,
+    pub records_path: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -34,52 +29,17 @@ pub enum Operation {
 }
 
 fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
-    let input_path = Path::new(&arg);
+    let actual_path = construct_abs_path(arg);
 
-    let mut final_path: Option<PathBuf> = None;
-
-    if input_path.is_relative() && input_path.starts_with("~/") {
-        let path_from_home_dir = Path::new(&input_path.to_str().unwrap()[2..]);
-
-        if let Some(mut hdir) = home_dir() {
-            hdir.push(path_from_home_dir);
-            final_path = Some(hdir);
+    if !actual_path.exists() {
+        return Err("File doesn't exist");
+    } else {
+        if !actual_path.is_file() {
+            return Err("Not a file");
         }
     }
-    let actual_path = match final_path {
-        Some(p) => p,
-        None => {
-            eprintln!("Error");
-            exit(1)
-        }
-    };
-    println!("{:?} {} {}", actual_path, actual_path.exists(), actual_path.is_file());
-    Ok(PathBuf::new())
 
-    // if x.starts_with("~") {
-    //     x = env::home_dir().unwrap().join().as_path();
-    // }
-    // match x.exists() {
-    //     true => {
-
-    //         if x.is_file() {
-    //             Ok(x.to_owned())
-    //         } else {
-    //             Err("Not a File")
-    //         };
-    //         if x.ends_with(".psv") {
-    //             Ok(x.to_owned())
-    //         } else {
-    //             Err("Not a .psv")
-    //         };
-    //         Ok(x.to_owned())
-    //     },
-    //     false => {
-    //         Err(
-    //             "file doesn't exit"
-    //         )
-    //     }
-    // }
+    Ok(actual_path)
 }
 
 fn amount_validation(arg: &str) -> Result<f64, &'static str> {
@@ -132,21 +92,21 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) {
                 add_args.category,
                 add_args.tag,
             );
-            new_expense.write_expense_to_psv(None);
+            new_expense.write_expense_to_psv(args.records_path);
         }
         Operation::Filter(filter_args) => {
             Expense::filter_expenses(
                 filter_args.category,
                 filter_args.tag,
                 filter_args.amount,
-                None,
+                args.records_path,
             );
         }
         Operation::List => {
-            Expense::list_expenses(None);
+            Expense::list_expenses(args.records_path);
         }
         Operation::Total => {
-            let total = Expense::expense_total(None);
+            let total = Expense::expense_total(args.records_path);
             match total {
                 Ok(total) => {
                     println!("Total: {}", total)

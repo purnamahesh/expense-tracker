@@ -1,10 +1,11 @@
 use std::fs::OpenOptions;
 use std::num::ParseFloatError;
+use std::path::{Path, PathBuf};
 use std::{io::Write, process::exit, vec};
 
 use chrono::{DateTime, Utc};
 
-use crate::config::{DEFAULT_PATH, TIME_FORMAT};
+use crate::config::TIME_FORMAT;
 use crate::utils::file_parser::read_file_content;
 
 pub struct Expense {
@@ -28,7 +29,7 @@ impl ExpenseList {
 
     pub fn load_expenses_from_psv(
         &mut self,
-        file_path: Option<&str>,
+        file_path: Option<PathBuf>,
     ) -> Result<(), ParseFloatError> {
         let content: String = read_file_content(file_path);
         for line in content.trim().split('\n') {
@@ -71,11 +72,11 @@ impl Expense {
         }
     }
 
-    pub fn write_expense_to_psv(&self, file_path: Option<&str>) {
+    pub fn write_expense_to_psv(&self, file_path: Option<PathBuf>) {
         let record = self.to_psv_record();
         let content = record.as_bytes();
 
-        let path = file_path.unwrap_or(DEFAULT_PATH);
+        let path = file_path.unwrap_or(Path::new("expense_db.psv").to_path_buf());
 
         let mut file = OpenOptions::new()
             .append(true)
@@ -122,14 +123,14 @@ impl Expense {
         }
     }
 
-    pub fn list_expenses(file_path: Option<&str>) {
+    pub fn list_expenses(file_path: Option<PathBuf>) {
         let expense_list = Self::get_expense_list_from_psv(file_path);
         let x = Vec::from_iter(expense_list.expense_list.iter());
 
         Self::display_expenses(x);
     }
 
-    pub fn expense_total(file_path: Option<&str>) -> Result<f64, Box<dyn std::error::Error>> {
+    pub fn expense_total(file_path: Option<PathBuf>) -> Result<f64, Box<dyn std::error::Error>> {
         let expense_list = Self::get_expense_list_from_psv(file_path);
 
         let mut total: f64 = 0.0;
@@ -141,7 +142,7 @@ impl Expense {
         Ok(total)
     }
 
-    fn get_expense_list_from_psv(file_path: Option<&str>) -> ExpenseList {
+    fn get_expense_list_from_psv(file_path: Option<PathBuf>) -> ExpenseList {
         let mut expense_list = ExpenseList::new();
 
         expense_list
@@ -158,7 +159,7 @@ impl Expense {
         category: Option<String>,
         tags: Option<Vec<String>>,
         amount: Option<f64>,
-        file_path: Option<&str>,
+        file_path: Option<PathBuf>,
     ) {
         let expense_list = Self::get_expense_list_from_psv(file_path);
 
