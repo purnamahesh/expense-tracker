@@ -10,7 +10,7 @@ documentation = "https://github.com/purnamahesh/expense-tracker"
 homepage = "https://github.com/purnamahesh/expense-tracker"
 repository = "https://github.com/purnamahesh/expense-tracker"
 keywords = ["expense", "tracker"]
-categories = ["command-line-utilities", "utilities", "finance"]
+categories = ["command-line-utilities"]
 license-file = "LICENSE"
 exclude = [
   "/.github/",
