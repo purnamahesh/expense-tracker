@@ -732,10 +732,10 @@ Simple interactive script for quick version bumping.
 - Shows command to publish to crates.io
 
 #### 5. **Pre-Release Workflow** (`.github/workflows/pre-release.yml`)
-Publish alpha/beta versions directly from pull requests using PR comments.
+Publish alpha/beta/rc versions directly from pull requests using PR comments.
 
 **How it works:**
-- Triggered by commenting on a PR with `/pre-release --type=alpha` or `/pre-release --type=beta`
+- Triggered by commenting on a PR with `/pre-release alpha`, `/pre-release beta`, or `/pre-release rc`
 - **Job 1 (Check for Changes):**
   - Skips pre-release if no `.rs` files changed in the PR
   - Adds a skip message comment to the PR
@@ -755,7 +755,7 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 
 **Usage:**
 1. Open a pull request
-2. Add a comment: `/pre-release --type=alpha` or `/pre-release --type=beta`
+2. Add a comment: `/pre-release alpha`, `/pre-release beta`, or `/pre-release rc`
 3. Workflow automatically:
    - Bumps version with suffix (e.g., `0.1.0` → `0.1.1-alpha.0` or `0.1.1-alpha.0` → `0.1.1-alpha.1`)
    - Commits changes to your PR branch
@@ -766,20 +766,22 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 **Examples:**
 ```bash
 # In a PR comment:
-/pre-release --type=alpha    # Creates version like 0.1.1-alpha.0, 0.1.1-alpha.1, etc.
-/pre-release --type=beta     # Creates version like 0.1.1-beta.0, 0.1.1-beta.1, etc.
+/pre-release alpha    # Creates version like 0.1.1-alpha.0, 0.1.1-alpha.1, etc.
+/pre-release beta     # Creates version like 0.1.1-beta.0, 0.1.1-beta.1, etc.
+/pre-release rc       # Creates version like 0.1.1-rc.0, 0.1.1-rc.1, etc.
+/pre-release          # Defaults to alpha
 ```
 
 **Version Format:**
-- `1.0.0` → `/pre-release --type=alpha` → `1.0.1-alpha.0`
-- `1.0.1-alpha.0` → `/pre-release --type=alpha` → `1.0.1-alpha.1`
-- `1.0.1-alpha.1` → `/pre-release --type=beta` → `1.0.1-beta.0` (switches type)
-- `1.0.1-beta.0` → `/pre-release --type=beta` → `1.0.1-beta.1`
+- `1.0.0` → `/pre-release alpha` → `1.0.1-alpha.0`
+- `1.0.1-alpha.0` → `/pre-release alpha` → `1.0.1-alpha.1`
+- `1.0.1-alpha.1` → `/pre-release beta` → `1.0.1-beta.0` (switches type)
+- `1.0.1-beta.0` → `/pre-release beta` → `1.0.1-beta.1`
 
 **Requirements:**
 - Must be run from a pull request
 - Requires `CARGO_REGISTRY_TOKEN` secret
-- Comment must be exactly `/pre-release --type=alpha` or `/pre-release --type=beta`
+- Comment format: `/pre-release [alpha|beta|rc]`
 
 ### **Requirements:**
 

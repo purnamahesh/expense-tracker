@@ -1,8 +1,6 @@
 name: Pre-Release
 
 on:
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
       prerelease-type:
@@ -26,46 +24,19 @@ concurrency:
 
 jobs:
   check-trigger:
-    # Run on either PR comments or workflow dispatch
-    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request
+    # Only triggered via workflow_dispatch (from command-dispatch or manual)
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       prerelease_type: ${{ steps.check.outputs.prerelease_type }}
-      pr_number: ${{ steps.check.outputs.pr_number }}
-      comment_id: ${{ github.event.comment.id }}
 
     steps:
-      - name: Determine trigger source and prerelease type
+      - name: Set prerelease type
         id: check
-        env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Triggered via workflow_dispatch (from command-dispatch or manual)
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "prerelease_type=${{ inputs.prerelease-type }}" >> $GITHUB_OUTPUT
-            echo "pr_number=" >> $GITHUB_OUTPUT
-            echo "Triggered via workflow_dispatch with type: ${{ inputs.prerelease-type }}"
-          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            # Triggered via issue comment (legacy support)
-            # Sanitize input: only allow specific patterns to prevent command injection
-            # Match /pre-release --type=alpha or /pre-release --type=beta exactly
-            if printf '%s' "$COMMENT_BODY" | grep -qE "^/pre-release[[:space:]]+--type=(alpha|beta|rc)[[:space:]]*$"; then
-              echo "should_run=true" >> $GITHUB_OUTPUT
-              PRERELEASE_TYPE=$(printf '%s' "$COMMENT_BODY" | grep -oE "(alpha|beta|rc)")
-              echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
-              echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-              echo "Detected pre-release command: $PRERELEASE_TYPE"
-            else
-              echo "should_run=false" >> $GITHUB_OUTPUT
-              echo "pr_number=" >> $GITHUB_OUTPUT
-              echo "Not a pre-release command"
-            fi
-          else
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "pr_number=" >> $GITHUB_OUTPUT
-          fi
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "prerelease_type=${{ inputs.prerelease-type }}" >> $GITHUB_OUTPUT
+          echo "Triggered with type: ${{ inputs.prerelease-type }}"
 
   check-rust-changes:
     needs: check-trigger
@@ -127,17 +98,10 @@ jobs:
             echo "No Rust files changed in this PR"
           fi
 
-      - name: Skip pre-release comment
-        if: steps.rust_changes.outputs.has_changes == 'false' && needs.check-trigger.outputs.pr_number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
-              body: '⏭️ **Skipping pre-release** - No Rust file changes detected in this PR'
-            });
+      - name: Skip pre-release log
+        if: steps.rust_changes.outputs.has_changes == 'false'
+        run: |
+          echo "⏭️ Skipping pre-release - no Rust file changes detected"
 
   bump-and-publish:
     needs: [check-trigger, check-rust-changes]
@@ -255,65 +219,34 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-  comment-and-react:
+  summary:
     needs: [check-trigger, bump-and-publish]
-    if: needs.check-trigger.outputs.should_run == 'true' && needs.bump-and-publish.outputs.new_version != '' && needs.check-trigger.outputs.pr_number != ''
+    if: always()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Add comment to PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const newVersion = '${{ needs.bump-and-publish.outputs.new_version }}';
-            const prereleaseType = '${{ needs.check-trigger.outputs.prerelease_type }}';
+      - name: Pre-release summary
+        run: |
+          echo "### Pre-release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
-              body: `## 🚀 Pre-release Published\n\n**Version:** \`${newVersion}\`\n**Type:** ${prereleaseType}\n\nSuccessfully published to [crates.io](https://crates.io/crates/${{ github.event.repository.name }})!\n\nThe version has been bumped and committed to this PR branch.\n\n### Install this version:\n\`\`\`bash\ncargo install ${{ github.event.repository.name }} --version ${newVersion}\n\`\`\``
-            });
-
-      - name: Add thumbs up reaction to trigger comment
-        if: needs.check-trigger.outputs.comment_id != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: ${{ needs.check-trigger.outputs.comment_id }},
-              content: '+1'
-            });
-
-  handle-failure:
-    needs: [check-trigger, bump-and-publish]
-    if: failure() && needs.check-trigger.outputs.should_run == 'true' && needs.check-trigger.outputs.pr_number != ''
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Add failure comment to PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prereleaseType = '${{ needs.check-trigger.outputs.prerelease_type }}';
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
-              body: `## ❌ Pre-release Failed\n\n**Type:** ${prereleaseType}\n\nFailed to publish pre-release. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
-            });
-
-      - name: Add thumbs down reaction to trigger comment
-        if: needs.check-trigger.outputs.comment_id != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: ${{ needs.check-trigger.outputs.comment_id }},
-              content: '-1'
-            });
+          if [ "${{ needs.bump-and-publish.result }}" = "success" ]; then
+            echo "✅ **Pre-release Published Successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version:** \`${{ needs.bump-and-publish.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Type:** ${{ needs.check-trigger.outputs.prerelease_type }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Package:** ${{ github.event.repository.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Install:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "cargo install ${{ github.event.repository.name }} --version ${{ needs.bump-and-publish.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.bump-and-publish.result }}" = "skipped" ]; then
+            echo "⏭️ **Pre-release Skipped**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No Rust file changes detected." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Pre-release Failed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+          fi

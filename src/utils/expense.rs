@@ -209,9 +209,16 @@ mod tests {
     const MOCK_EXPENSE_PATH: &'static str = "tests/resources/mock_expenses.psv";
 
     #[fixture]
-    fn mock_expenses_list() -> ExpenseList {
+    fn mock_expenses_path() -> PathBuf {
+       PathBuf::from(MOCK_EXPENSE_PATH)
+    }
+
+    #[fixture]
+    fn mock_expenses_list(mock_expenses_path: PathBuf) -> ExpenseList {
         let mut mock_expenses_list = ExpenseList::new();
-        mock_expenses_list.load_expenses_from_psv(Some(MOCK_EXPENSE_PATH));
+        mock_expenses_list.load_expenses_from_psv(Some(mock_expenses_path)).unwrap_or_else(|err|{
+            eprintln!("Failed to parse amount : {}", err); 
+        });
 
         mock_expenses_list
     }
@@ -227,11 +234,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_expense_total(mock_expenses_list: ExpenseList) {
-        let total = Expense::expense_total(Some(MOCK_EXPENSE_PATH));
+    fn test_expense_total(mock_expenses_path: PathBuf) {
+        let total = Expense::expense_total(Some(mock_expenses_path));
         match total {
             Ok(total) => {
-                println!("Total: {}", total)
+                assert_eq!(total, 1044.0);
             }
             Err(err) => {
                 eprintln!("Error: {}", err);
