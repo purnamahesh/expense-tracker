@@ -10,7 +10,7 @@ documentation = "https://github.com/purnamahesh/expense-tracker"
 homepage = "https://github.com/purnamahesh/expense-tracker"
 repository = "https://github.com/purnamahesh/expense-tracker"
 keywords = ["expense", "tracker"]
-categories = ["command-line-utilities"]
+categories = ["command-line-utilities", "utilities", "finance"]
 license-file = "LICENSE"
 exclude = [
   "/.github/",
@@ -18,8 +18,9 @@ exclude = [
   "/.gitignore"
 ]
 autotests = false
-rust-version = "1.90.0"
+rust-version = "1.91.0"
 
 [dependencies]
 chrono = "0.4.42"
 clap = { version = "4.5.51", features = ["derive"] }
+rstest = "0.26.1"

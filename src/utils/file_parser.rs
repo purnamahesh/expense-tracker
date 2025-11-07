@@ -14,7 +14,8 @@ pub fn read_file_content(file_path: Option<&str>) -> String {
                 eprintln!("No records yet at {}", path);
                 exit(0);
             } else {
-                panic!("Error: {}", err)
+                eprintln!("Error : {}", err);
+                exit(0);
             }
         });
 
@@ -27,3 +28,14 @@ pub fn read_file_content(file_path: Option<&str>) -> String {
 
     content
 }
+
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+
+//     #[test]
+//     #[should_panic(expected="No records yet at ")]
+//     fn test_load_expenses_from_psv() {
+//         let _ = read_file_content(Some("./expense_db.csv"));
+//     }
+// }
