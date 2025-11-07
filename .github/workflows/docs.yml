@@ -2,14 +2,14 @@
 name: Documentation
 
 on:
-  # push:
-  #   branches:
-  #     - main
-  #     - master
-  #   paths:
-  #     - 'src/**'
-  #     - 'Cargo.toml'
-  #     - '.github/workflows/docs.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - '.github/workflows/docs.yml'
   pull_request:
     branches:
       - main
@@ -18,6 +18,12 @@ on:
       - 'src/**'
       - 'Cargo.toml'
   workflow_dispatch:
+    inputs:
+      commit-docs:
+        description: 'Commit generated docs back to branch'
+        required: false
+        type: boolean
+        default: true
 
 # Allow one concurrent deployment
 concurrency:
@@ -60,6 +66,7 @@ jobs:
         run: touch docs/.nojekyll
 
       - name: Commit and push documentation
+        if: inputs.commit-docs != false
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

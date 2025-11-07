@@ -33,10 +33,8 @@ fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
 
     if !actual_path.exists() {
         return Err("File doesn't exist");
-    } else {
-        if !actual_path.is_file() {
-            return Err("Not a file");
-        }
+    } else if !actual_path.is_file() {
+        return Err("Not a file");
     }
 
     Ok(actual_path)

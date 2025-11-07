@@ -87,31 +87,34 @@ jobs:
           if [ "$BUMP_TYPE" = "prerelease" ]; then
             PRERELEASE_TYPE="${{ inputs.prerelease_type }}"
 
-            # Set suffix based on type (a for alpha, b for beta)
+            # Set suffix based on type (proper SemVer format)
             if [ "$PRERELEASE_TYPE" = "alpha" ]; then
-              SUFFIX="a"
+              SUFFIX="alpha"
+            elif [ "$PRERELEASE_TYPE" = "beta" ]; then
+              SUFFIX="beta"
             else
-              SUFFIX="b"
+              SUFFIX="rc"
             fi
 
             # Check if already a pre-release version with same type
-            if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
+            # Pattern: 1.0.0-alpha.0 or 1.0.0-beta.1 or 1.0.0-rc.2
+            if echo "$CURRENT_VERSION" | grep -qE "\-${SUFFIX}\.[0-9]+$"; then
               # Extract base version and current pre-release number
-              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
+              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-${SUFFIX}\.[0-9]+$//")
               CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
               NEW_NUM=$((CURRENT_NUM + 1))
-              NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
+              NEW_VERSION="${BASE_VERSION}-${SUFFIX}.${NEW_NUM}"
             else
-              # Check if it's a different pre-release type (switch from a to b or vice versa)
-              if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
+              # Check if it's a different pre-release type (switch between alpha/beta/rc)
+              if echo "$CURRENT_VERSION" | grep -qE "-(alpha|beta|rc)\.[0-9]+$"; then
                 # Remove old pre-release suffix
-                BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
-                NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+                BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-(alpha|beta|rc)\.[0-9]+$//")
+                NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
               else
                 # Not a pre-release, bump patch and add suffix
                 cargo bump patch
                 BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-                NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+                NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
               fi
             fi
 

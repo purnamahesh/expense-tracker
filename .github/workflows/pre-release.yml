@@ -3,6 +3,17 @@ name: Pre-Release
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      prerelease-type:
+        description: 'Type of prerelease (alpha, beta, rc)'
+        required: false
+        type: choice
+        options:
+          - alpha
+          - beta
+          - rc
+        default: 'alpha'
 
 permissions:
   contents: write
@@ -10,41 +21,55 @@ permissions:
   issues: write
 
 concurrency:
-  group: pre-release-${{ github.event.issue.number }}
+  group: pre-release-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check-comment:
-    # Only run on PR comments
-    if: github.event.issue.pull_request
+  check-trigger:
+    # Run on either PR comments or workflow dispatch
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       prerelease_type: ${{ steps.check.outputs.prerelease_type }}
-      pr_number: ${{ github.event.issue.number }}
+      pr_number: ${{ steps.check.outputs.pr_number }}
       comment_id: ${{ github.event.comment.id }}
 
     steps:
-      - name: Check if comment is pre-release command
+      - name: Determine trigger source and prerelease type
         id: check
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          # Sanitize input: only allow specific patterns to prevent command injection
-          # Match /pre-release --type=alpha or /pre-release --type=beta exactly
-          if printf '%s' "$COMMENT_BODY" | grep -qE "^/pre-release[[:space:]]+--type=(alpha|beta)[[:space:]]*$"; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Triggered via workflow_dispatch (from command-dispatch or manual)
             echo "should_run=true" >> $GITHUB_OUTPUT
-            PRERELEASE_TYPE=$(printf '%s' "$COMMENT_BODY" | grep -oE "(alpha|beta)")
-            echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
-            echo "Detected pre-release command: $PRERELEASE_TYPE"
+            echo "prerelease_type=${{ inputs.prerelease-type }}" >> $GITHUB_OUTPUT
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "Triggered via workflow_dispatch with type: ${{ inputs.prerelease-type }}"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            # Triggered via issue comment (legacy support)
+            # Sanitize input: only allow specific patterns to prevent command injection
+            # Match /pre-release --type=alpha or /pre-release --type=beta exactly
+            if printf '%s' "$COMMENT_BODY" | grep -qE "^/pre-release[[:space:]]+--type=(alpha|beta|rc)[[:space:]]*$"; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+              PRERELEASE_TYPE=$(printf '%s' "$COMMENT_BODY" | grep -oE "(alpha|beta|rc)")
+              echo "prerelease_type=$PRERELEASE_TYPE" >> $GITHUB_OUTPUT
+              echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+              echo "Detected pre-release command: $PRERELEASE_TYPE"
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              echo "pr_number=" >> $GITHUB_OUTPUT
+              echo "Not a pre-release command"
+            fi
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "Not a pre-release command"
+            echo "pr_number=" >> $GITHUB_OUTPUT
           fi
 
   check-rust-changes:
-    needs: check-comment
-    if: needs.check-comment.outputs.should_run == 'true'
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_run == 'true'
     runs-on: ubuntu-latest
 
     outputs:
@@ -52,19 +77,27 @@ jobs:
       pr_ref: ${{ steps.pr.outputs.ref }}
 
     steps:
-      - name: Get PR branch
+      - name: Get PR branch or current ref
         id: pr
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: ${{ needs.check-comment.outputs.pr_number }}
-            });
-            core.setOutput('ref', pr.data.head.ref);
-            core.setOutput('sha', pr.data.head.sha);
-            return pr.data.head.ref;
+            if ('${{ github.event_name }}' === 'workflow_dispatch') {
+              // For workflow_dispatch, use current ref
+              core.setOutput('ref', context.ref.replace('refs/heads/', ''));
+              core.setOutput('sha', context.sha);
+              return context.ref.replace('refs/heads/', '');
+            } else {
+              // For issue_comment, get PR info
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: ${{ needs.check-trigger.outputs.pr_number || 0 }}
+              });
+              core.setOutput('ref', pr.data.head.ref);
+              core.setOutput('sha', pr.data.head.sha);
+              return pr.data.head.ref;
+            }
 
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -95,19 +128,19 @@ jobs:
           fi
 
       - name: Skip pre-release comment
-        if: steps.rust_changes.outputs.has_changes == 'false'
+        if: steps.rust_changes.outputs.has_changes == 'false' && needs.check-trigger.outputs.pr_number != ''
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
               body: '⏭️ **Skipping pre-release** - No Rust file changes detected in this PR'
             });
 
   bump-and-publish:
-    needs: [check-comment, check-rust-changes]
+    needs: [check-trigger, check-rust-changes]
     if: needs.check-rust-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
 
@@ -146,33 +179,36 @@ jobs:
           CURRENT_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           echo "$CURRENT_VERSION"
 
-          PRERELEASE_TYPE="${{ needs.check-comment.outputs.prerelease_type }}"
+          PRERELEASE_TYPE="${{ needs.check-trigger.outputs.prerelease_type }}"
 
-          # Set suffix based on type (a for alpha, b for beta)
+          # Set suffix based on type (proper SemVer format)
           if [ "$PRERELEASE_TYPE" = "alpha" ]; then
-            SUFFIX="a"
+            SUFFIX="alpha"
+          elif [ "$PRERELEASE_TYPE" = "beta" ]; then
+            SUFFIX="beta"
           else
-            SUFFIX="b"
+            SUFFIX="rc"
           fi
 
           # Check if already a pre-release version with same type
-          if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
+          # Pattern: 1.0.0-alpha.0 or 1.0.0-beta.1 or 1.0.0-rc.2
+          if echo "$CURRENT_VERSION" | grep -qE "\-${SUFFIX}\.[0-9]+$"; then
             # Extract base version and current pre-release number
-            BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
+            BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-${SUFFIX}\.[0-9]+$//")
             CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
             NEW_NUM=$((CURRENT_NUM + 1))
-            NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
+            NEW_VERSION="${BASE_VERSION}-${SUFFIX}.${NEW_NUM}"
           else
-            # Check if it's a different pre-release type (switch from a to b or vice versa)
-            if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
+            # Check if it's a different pre-release type (switch between alpha/beta/rc)
+            if echo "$CURRENT_VERSION" | grep -qE "-(alpha|beta|rc)\.[0-9]+$"; then
               # Remove old pre-release suffix
-              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
-              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+              BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-(alpha|beta|rc)\.[0-9]+$//")
+              NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
             else
               # Not a pre-release, bump patch and add suffix
               cargo bump patch
               BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-              NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+              NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
             fi
           fi
 
@@ -220,8 +256,8 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   comment-and-react:
-    needs: [check-comment, bump-and-publish]
-    if: needs.check-comment.outputs.should_run == 'true' && needs.bump-and-publish.outputs.new_version != ''
+    needs: [check-trigger, bump-and-publish]
+    if: needs.check-trigger.outputs.should_run == 'true' && needs.bump-and-publish.outputs.new_version != '' && needs.check-trigger.outputs.pr_number != ''
     runs-on: ubuntu-latest
 
     steps:
@@ -230,29 +266,30 @@ jobs:
         with:
           script: |
             const newVersion = '${{ needs.bump-and-publish.outputs.new_version }}';
-            const prereleaseType = '${{ needs.check-comment.outputs.prerelease_type }}';
+            const prereleaseType = '${{ needs.check-trigger.outputs.prerelease_type }}';
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
               body: `## 🚀 Pre-release Published\n\n**Version:** \`${newVersion}\`\n**Type:** ${prereleaseType}\n\nSuccessfully published to [crates.io](https://crates.io/crates/${{ github.event.repository.name }})!\n\nThe version has been bumped and committed to this PR branch.\n\n### Install this version:\n\`\`\`bash\ncargo install ${{ github.event.repository.name }} --version ${newVersion}\n\`\`\``
             });
 
       - name: Add thumbs up reaction to trigger comment
+        if: needs.check-trigger.outputs.comment_id != ''
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              comment_id: ${{ needs.check-comment.outputs.comment_id }},
+              comment_id: ${{ needs.check-trigger.outputs.comment_id }},
               content: '+1'
             });
 
   handle-failure:
-    needs: [check-comment, bump-and-publish]
-    if: failure() && needs.check-comment.outputs.should_run == 'true'
+    needs: [check-trigger, bump-and-publish]
+    if: failure() && needs.check-trigger.outputs.should_run == 'true' && needs.check-trigger.outputs.pr_number != ''
     runs-on: ubuntu-latest
 
     steps:
@@ -260,22 +297,23 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prereleaseType = '${{ needs.check-comment.outputs.prerelease_type }}';
+            const prereleaseType = '${{ needs.check-trigger.outputs.prerelease_type }}';
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: ${{ needs.check-comment.outputs.pr_number }},
+              issue_number: ${{ needs.check-trigger.outputs.pr_number }},
               body: `## ❌ Pre-release Failed\n\n**Type:** ${prereleaseType}\n\nFailed to publish pre-release. Check the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
             });
 
       - name: Add thumbs down reaction to trigger comment
+        if: needs.check-trigger.outputs.comment_id != ''
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              comment_id: ${{ needs.check-comment.outputs.comment_id }},
+              comment_id: ${{ needs.check-trigger.outputs.comment_id }},
               content: '-1'
             });

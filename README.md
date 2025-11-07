@@ -691,8 +691,8 @@ Interactive script that replicates the GitHub Actions pre-release workflow local
 
 **Examples:**
 ```bash
-./pre-release.sh alpha   # Create alpha pre-release (e.g., 1.0.1a0)
-./pre-release.sh beta    # Create beta pre-release (e.g., 1.0.1b0)
+./pre-release.sh alpha   # Create alpha pre-release (e.g., 1.0.1-alpha.0)
+./pre-release.sh beta    # Create beta pre-release (e.g., 1.0.1-beta.0)
 ```
 
 **Features:**
@@ -700,9 +700,9 @@ Interactive script that replicates the GitHub Actions pre-release workflow local
 - ✓ Detects if on feature branch vs base branch
 - ✓ Checks for Rust file changes compared to base branch
 - ✓ Smart version calculation:
-  - Increments if same type (1.0.1a0 → 1.0.1a1)
-  - Resets if switching type (1.0.1a2 → 1.0.1b0)
-  - Bumps patch if stable (1.0.0 → 1.0.1a0)
+  - Increments if same type (1.0.1-alpha.0 → 1.0.1-alpha.1)
+  - Resets if switching type (1.0.1-alpha.2 → 1.0.1-beta.0)
+  - Bumps patch if stable (1.0.0 → 1.0.1-alpha.0)
 - ✓ Interactive y/n prompts for each action
 - ✓ Portable (works on macOS and Linux)
 
@@ -757,7 +757,7 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 1. Open a pull request
 2. Add a comment: `/pre-release --type=alpha` or `/pre-release --type=beta`
 3. Workflow automatically:
-   - Bumps version with suffix (e.g., `0.1.0` → `0.1.1a0` or `0.1.1a0` → `0.1.1a1`)
+   - Bumps version with suffix (e.g., `0.1.0` → `0.1.1-alpha.0` or `0.1.1-alpha.0` → `0.1.1-alpha.1`)
    - Commits changes to your PR branch
    - Creates a git tag for the new version
    - Publishes to crates.io
@@ -766,15 +766,15 @@ Publish alpha/beta versions directly from pull requests using PR comments.
 **Examples:**
 ```bash
 # In a PR comment:
-/pre-release --type=alpha    # Creates version like 0.1.1a0, 0.1.1a1, etc.
-/pre-release --type=beta     # Creates version like 0.1.1b0, 0.1.1b1, etc.
+/pre-release --type=alpha    # Creates version like 0.1.1-alpha.0, 0.1.1-alpha.1, etc.
+/pre-release --type=beta     # Creates version like 0.1.1-beta.0, 0.1.1-beta.1, etc.
 ```
 
 **Version Format:**
-- `1.0.0` → `/pre-release --type=alpha` → `1.0.1a0`
-- `1.0.1a0` → `/pre-release --type=alpha` → `1.0.1a1`
-- `1.0.1a1` → `/pre-release --type=beta` → `1.0.1b0` (switches type)
-- `1.0.1b0` → `/pre-release --type=beta` → `1.0.1b1`
+- `1.0.0` → `/pre-release --type=alpha` → `1.0.1-alpha.0`
+- `1.0.1-alpha.0` → `/pre-release --type=alpha` → `1.0.1-alpha.1`
+- `1.0.1-alpha.1` → `/pre-release --type=beta` → `1.0.1-beta.0` (switches type)
+- `1.0.1-beta.0` → `/pre-release --type=beta` → `1.0.1-beta.1`
 
 **Requirements:**
 - Must be run from a pull request
@@ -1039,6 +1039,134 @@ git add docs/
 git commit -m "docs: update documentation [skip ci]"
 git push
 ```
+
+---
+
+## **GitHub Actions Workflows**
+
+This project includes a comprehensive set of GitHub Actions workflows for automation.
+
+### **Command Dispatch** (`.github/workflows/command-dispatch.yml`)
+
+Trigger workflows via slash commands in PR comments.
+
+**Available Commands:**
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/pre-release [TYPE]` | Create pre-release | `/pre-release alpha` |
+| `/test` | Run test suite | `/test` |
+| `/docs` | Generate documentation | `/docs` |
+
+**Usage Example:**
+```bash
+# In a PR comment:
+/pre-release beta
+/test
+/docs
+```
+
+**Features:**
+- ✓ Permission checking (requires write/maintain/admin)
+- ✓ Argument parsing (named and unnamed)
+- ✓ Real-time feedback with reactions and comments
+- ✓ Triggers workflow_dispatch on target workflows
+
+**How it works:**
+1. User comments `/command` on a PR
+2. Workflow validates user permissions
+3. Parses command and arguments
+4. Triggers the appropriate workflow via `workflow_dispatch`
+5. Comments back with status and link to workflow run
+
+**Example Flow:**
+```
+PR Comment: /pre-release beta
+     ↓
+command-dispatch.yml parses command
+     ↓
+Triggers pre-release.yml with input: prerelease-type=beta
+     ↓
+pre-release.yml executes
+     ↓
+Comments back to PR with results
+```
+
+See [.github/COMMAND_DISPATCH_GUIDE.md](.github/COMMAND_DISPATCH_GUIDE.md) for detailed documentation.
+
+---
+
+### **Docker Release** (`.github/workflows/release-docker.yml`)
+
+Reusable workflow for building and pushing Docker images.
+
+**Features:**
+- 🐳 Multi-arch builds (linux/amd64, linux/arm64)
+- 🏷️ Smart tagging strategy (pre-release vs stable)
+- 📦 GitHub Container Registry (ghcr.io) or Docker Hub support
+- 🔒 Security scanning with Trivy
+- 📋 SBOM and provenance generation
+- ⚡ Build caching for faster builds
+
+**Usage:**
+```yaml
+jobs:
+  docker:
+    uses: ./.github/workflows/release-docker.yml
+    secrets: inherit
+    with:
+      image-name: expense-tracker
+      version: 1.0.0
+      platforms: linux/amd64,linux/arm64
+      docker-registry: ghcr.io
+```
+
+**Tagging Strategy:**
+- **Pre-release** (e.g., `1.0.0-alpha.1`, `1.0.0-beta.2`, `1.0.0-rc.3`): Only exact version tag
+- **Stable** (e.g., `1.0.0`): Version + major.minor + major + optionally "latest"
+
+**Example Tags:**
+```bash
+# Pre-release 1.0.0-alpha.1:
+ghcr.io/username/expense-tracker:1.0.0-alpha.1
+
+# Stable 1.2.3:
+ghcr.io/username/expense-tracker:1.2.3
+ghcr.io/username/expense-tracker:1.2
+ghcr.io/username/expense-tracker:1
+ghcr.io/username/expense-tracker:latest
+```
+
+**Required Secrets:**
+- `GITHUB_TOKEN` (automatic) for ghcr.io
+- OR `DOCKER_PASSWORD` for Docker Hub
+
+---
+
+### **Workflow Summary**
+
+All workflows use modern GitHub Actions and are optimized for Rust projects:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `command-dispatch.yml` | PR comment | Dispatch commands from PRs |
+| `test.yml` | PR, Push | Run tests and coverage |
+| `pre-release.yml` | PR comment, Manual | Publish pre-releases |
+| `release.yml` | Push to main/master | Auto-release stable versions |
+| `release-docker.yml` | Workflow call | Build Docker images |
+| `release-github.yml` | Workflow call | Create GitHub releases |
+| `docs.yml` | PR, Manual | Generate documentation |
+| `pr-title-check.yml` | PR | Validate PR titles |
+| `bump-version.yml` | Workflow call | Reusable version bumping |
+
+**Action Versions (All Modern):**
+- ✅ `actions/checkout@v4`
+- ✅ `actions/cache@v4`
+- ✅ `actions/github-script@v7`
+- ✅ `docker/build-push-action@v5`
+- ✅ `docker/metadata-action@v5`
+- ✅ `actions/download-artifact@v5`
+- ✅ `softprops/action-gh-release@v2`
 
 ---
 
