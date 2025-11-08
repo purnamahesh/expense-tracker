@@ -102,7 +102,7 @@ mod tests {
 
         assert_eq!(
             construct_file_path("~/filename.psv"),
-            PathBuf::from(home_path + "/filename.psv")
+            PathBuf::from(home_path).join("filename.psv")
         );
     }
 }
