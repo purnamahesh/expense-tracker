@@ -1,13 +1,9 @@
-mod cli;
-mod config;
-mod utils;
-
 use clap::Parser;
 
-use crate::cli::parse_sub_commands;
+use expense_tracker::cli;
 
 fn main() {
     let args = cli::ExpenseTrackerArgs::parse();
 
-    parse_sub_commands(args);
+    cli::parse_sub_commands(args);
 }

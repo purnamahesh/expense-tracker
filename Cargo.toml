@@ -21,6 +21,12 @@ autotests = false
 rust-version = "1.91.0"
 
 [dependencies]
+assert_cmd = "2.1.1"
 chrono = "0.4.42"
 clap = { version = "4.5.51", features = ["derive"] }
 rstest = "0.26.1"
+
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"

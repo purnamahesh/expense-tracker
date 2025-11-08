@@ -2,8 +2,8 @@ use std::{path::PathBuf, process::exit};
 
 use clap::{self, Args, Parser, Subcommand};
 
-use crate::utils::expense::Expense;
-use crate::utils::path::construct_abs_path;
+use crate::expense::Expense;
+use crate::path::construct_file_path;
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -29,7 +29,7 @@ pub enum Operation {
 }
 
 fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
-    let actual_path = construct_abs_path(arg);
+    let actual_path = construct_file_path(arg);
 
     if !actual_path.exists() {
         return Err("File doesn't exist");
@@ -40,7 +40,7 @@ fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
     Ok(actual_path)
 }
 
-fn amount_validation(arg: &str) -> Result<f64, &'static str> {
+fn validate_amount(arg: &str) -> Result<f64, &'static str> {
     let amount = arg.parse::<f64>();
     match amount {
         Ok(amount) => match amount > 0.0 {
@@ -54,7 +54,7 @@ fn amount_validation(arg: &str) -> Result<f64, &'static str> {
 #[derive(Args, Debug)]
 pub struct AddArgs {
     /// expense amount
-    #[arg(short, long, value_parser = amount_validation)]
+    #[arg(short, long, value_parser = validate_amount)]
     pub amount: f64,
     /// expense category
     #[arg(short, long)]
@@ -120,10 +120,65 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) {
 
 #[cfg(test)]
 mod test {
+    use std::{env, path::Path};
 
-    #[test]
-    #[should_panic]
-    fn test_add_command() {
-        panic!("error")
+    use super::*;
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn current_file_name() -> String {
+        let arrgs: Vec<String> = env::args().collect();
+        arrgs[0].to_owned()
+    }
+
+    // Testing validate_amount
+    #[rstest]
+    #[case("0.186", 0.186)]
+    #[case("10", 10.0)]
+    #[case("12.5", 12.5)]
+    fn test_validate_amount_valid(#[case] amount_inp: &str, #[case] amount_out: f64) {
+        assert_eq!(validate_amount(amount_inp), Ok(amount_out))
+    }
+
+    #[rstest]
+    #[case("0", "amount should be greater than 0.0")]
+    #[case("10doller", "Invalid value for amount!")]
+    fn test_validate_amount_invalid(#[case] amount_inp: &str, #[case] err_str: &str) {
+        assert_eq!(validate_amount(amount_inp), Err(err_str))
+    }
+
+    // Testing validate_file_pat
+    #[rstest]
+    fn test_validate_file_path_valid(current_file_name: String) {
+        assert!(validate_file_path(&current_file_name).is_ok());
+    }
+
+    #[rstest]
+    fn test_validate_file_path_invalid_file(current_file_name: String) {
+        assert!(
+            validate_file_path(
+                Path::new(&current_file_name)
+                    .parent()
+                    .unwrap()
+                    .join("no_exists.txt")
+                    .to_str()
+                    .unwrap()
+            )
+            .is_err()
+        );
+    }
+
+    #[rstest]
+    fn test_validate_file_path_invalid_dir(current_file_name: String) {
+        assert!(
+            validate_file_path(
+                Path::new(&current_file_name)
+                    .parent()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            )
+            .is_err()
+        );
     }
 }

@@ -6,7 +6,7 @@ use std::{io::Write, process::exit, vec};
 use chrono::{DateTime, Utc};
 
 use crate::config::TIME_FORMAT;
-use crate::utils::file_parser::read_file_content;
+use crate::file_parser::read_file_content;
 
 pub struct Expense {
     amount: f64,
@@ -16,6 +16,7 @@ pub struct Expense {
     description: Option<String>,
 }
 
+#[derive(Default)]
 pub struct ExpenseList {
     expense_list: Vec<Expense>,
 }
@@ -201,37 +202,31 @@ impl Expense {
 #[cfg(test)]
 mod tests {
 
-    use rstest::fixture;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
     use super::*;
 
-    const MOCK_EXPENSE_PATH: &'static str = "tests/resources/mock_expenses.psv";
+    const MOCK_EXPENSE_PATH: &str = "tests/resources/mock_expenses.psv";
 
     #[fixture]
     fn mock_expenses_path() -> PathBuf {
-       PathBuf::from(MOCK_EXPENSE_PATH)
+        PathBuf::from(MOCK_EXPENSE_PATH)
     }
 
     #[fixture]
     fn mock_expenses_list(mock_expenses_path: PathBuf) -> ExpenseList {
         let mut mock_expenses_list = ExpenseList::new();
-        mock_expenses_list.load_expenses_from_psv(Some(mock_expenses_path)).unwrap_or_else(|err|{
-            eprintln!("Failed to parse amount : {}", err); 
-        });
+        mock_expenses_list
+            .load_expenses_from_psv(Some(mock_expenses_path))
+            .unwrap_or_else(|err| {
+                eprintln!("Failed to parse amount : {}", err);
+            });
 
         mock_expenses_list
     }
 
-    #[rstest]
-    fn test_filter_expense(mock_expenses_list: ExpenseList) {
-        Expense::display_expenses(
-            mock_expenses_list
-                .expense_list
-                .iter()
-                .collect::<Vec<&Expense>>(),
-        );
-    }
+    // #[rstest]
+    // fn test_filter_expense(mock_expenses_list: ExpenseList) {}
 
     #[rstest]
     fn test_expense_total(mock_expenses_path: PathBuf) {

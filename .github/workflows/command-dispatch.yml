@@ -104,7 +104,7 @@ jobs:
           ARGS=$(echo "$FIRST_LINE" | cut -d' ' -f2- 2>/dev/null || echo "")
 
           # Validate command
-          VALID_COMMANDS="pre-release test docs"
+          VALID_COMMANDS="pre-release test docs bump"
           if echo "$VALID_COMMANDS" | grep -qw "$COMMAND"; then
             IS_VALID="true"
           else
@@ -211,7 +211,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `❌ Unknown command: \`/${{ steps.parse.outputs.command }}\`\n\nAvailable commands:\n- \`/pre-release [alpha|beta|rc]\`\n- \`/test [rust-version=stable|beta|nightly]\`\n- \`/docs\``
+              body: `❌ Unknown command: \`/${{ steps.parse.outputs.command }}\`\n\nAvailable commands:\n- \`/pre-release [alpha|beta|rc]\` - Create pre-release version\n- \`/test\` - Run test suite\n- \`/docs\` - Generate documentation\n- \`/bump [major|minor|patch]\` - Bump version and create release`
             });
 
   # ============================================
@@ -369,6 +369,85 @@ jobs:
 
             **Configuration:**
             - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
+
+            [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.parse-command.outputs.pr-number }},
+              body: body
+            });
+
+  # ============================================
+  # Command: /bump
+  # ============================================
+  bump:
+    name: Version Bump
+    needs: parse-command
+    if: |
+      needs.parse-command.outputs.is-valid == 'true' &&
+      needs.parse-command.outputs.command == 'bump'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse bump arguments
+        id: args
+        shell: bash
+        run: |
+          ARGS_JSON='${{ needs.parse-command.outputs.args-json }}'
+
+          # Extract bump type (empty if not specified for auto-detection)
+          TYPE=$(echo "$ARGS_JSON" | jq -r '.unnamed[0] // ""')
+
+          # Validate type if provided
+          if [ -n "$TYPE" ] && [[ ! "$TYPE" =~ ^(major|minor|patch)$ ]]; then
+            echo "⚠️ Invalid bump type '$TYPE', will auto-detect from commits"
+            TYPE=""
+          fi
+
+          echo "type=$TYPE" >> $GITHUB_OUTPUT
+
+          if [ -n "$TYPE" ]; then
+            echo "📌 Manual bump type: $TYPE"
+          else
+            echo "🔍 No bump type specified, will auto-detect from commits"
+          fi
+
+      - name: Trigger release workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: '${{ needs.parse-command.outputs.pr-branch }}',
+              inputs: {
+                'bump-type': '${{ steps.args.outputs.type }}'
+              }
+            });
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const bumpType = '${{ steps.args.outputs.type }}';
+            const bumpTypeDisplay = bumpType || 'auto-detect from commits';
+
+            const body = `🚀 **Version bump triggered**
+
+            **Configuration:**
+            - Bump Type: \`${bumpTypeDisplay}\`
+            - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
+            - Commit: \`${{ needs.parse-command.outputs.pr-sha }}\`
+
+            The workflow will:
+            1. Check for Rust file changes
+            2. ${bumpType ? 'Use manual bump type' : 'Analyze commits for bump type (feat: → minor, fix: → patch, feat!: → major)'}
+            3. Bump version in Cargo.toml
+            4. Create version bump commit
+            5. Create git tag
+            6. Publish to crates.io (if configured)
 
             [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
 

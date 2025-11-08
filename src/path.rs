@@ -3,7 +3,7 @@ use std::fs::DirBuilder;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-pub fn construct_abs_path(path: &str) -> PathBuf {
+pub fn construct_file_path(path: &str) -> PathBuf {
     let input_path = Path::new(&path);
 
     if input_path.is_relative() {
@@ -64,4 +64,45 @@ pub fn _initiate_config_file() {
     // let y = Path::new(home_dir);
 
     // println!("{}", x.display());
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::{fixture, rstest};
+    use std::env;
+
+    use super::*;
+
+    // #[should_panic]
+    #[fixture]
+    fn home_path() -> String {
+        #[cfg(target_os = "windows")]
+        let path = env::var("HOMEPATH").unwrap();
+
+        #[cfg(target_os = "linux")]
+        let path = env::var("HOME").unwrap();
+
+        #[cfg(target_os = "macos")]
+        let path = env::var("HOME").unwrap();
+
+        path
+    }
+
+    #[rstest]
+    fn test_construct_file_path(home_path: String) {
+        assert_eq!(
+            construct_file_path("filename.psv"),
+            PathBuf::from("filename.psv")
+        );
+
+        assert_eq!(
+            construct_file_path("./filename.psv"),
+            PathBuf::from("./filename.psv")
+        );
+
+        assert_eq!(
+            construct_file_path("~/filename.psv"),
+            PathBuf::from(home_path + "/filename.psv")
+        );
+    }
 }

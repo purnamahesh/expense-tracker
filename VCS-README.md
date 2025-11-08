@@ -217,19 +217,27 @@ This project includes automated version bumping using semantic versioning (semve
 
 ### **Available Tools:**
 
-#### 1. **GitHub Actions**
+#### 1. **GitHub Actions (Smart `/bump` command)**
 
 **File:** `.github/workflows/release.yml`
 
-Automatically bumps version and publishes to crates.io when pushing to `main` or `master` branch.
+Bumps version and publishes to crates.io when triggered via `/bump` comment on a PR.
 
 **How it works:**
+- **Trigger:** Comment `/bump [major|minor|patch]` on a pull request (or just `/bump` to auto-detect)
+- **Smart Bump Detection:**
+  - If type specified → Use that type
+  - If no type specified → Analyze conventional commit messages to determine bump type
 - **Check for Changes:**
   - Skips release if no `.rs` files changed since last tag
   - Displays skip message in workflow logs
-- **Job 1 (Check Changes & Determine Bump Type):**
-  - Analyzes commit messages since the last git tag
-  - Determines version bump type based on Conventional Commits
+- **Job 1 (Check Changes & Determine Type):**
+  - Verifies Rust file changes since last tag
+  - Uses manual bump type OR auto-detects from commits:
+    - `feat!:` or `BREAKING CHANGE:` → **MAJOR**
+    - `feat:` → **MINOR**
+    - `fix:` → **PATCH**
+    - default → **PATCH**
 - **Job 2 (Version Bump):**
   - Uses the reusable `bump-version.yml` workflow
   - Creates a new branch with version changes
@@ -247,25 +255,75 @@ To enable automatic publishing to crates.io, add `CARGO_REGISTRY_TOKEN` to your 
 2. Go to repository Settings → Secrets and variables → Actions
 3. Add new secret: `CARGO_REGISTRY_TOKEN`
 
-**Conventional Commit Format:**
-- `feat!:` or `BREAKING CHANGE:` → **MAJOR** bump (0.1.0 → 1.0.0)
-- `feat:` → **MINOR** bump (0.1.0 → 0.2.0)
-- `fix:` → **PATCH** bump (0.1.0 → 0.1.1)
-- Other commits → **PATCH** bump (default)
+**Usage:**
+```bash
+# In a PR comment:
+
+# Manual bump type (override auto-detection)
+/bump major    # 0.1.0 → 1.0.0 (breaking changes)
+/bump minor    # 0.1.0 → 0.2.0 (new features)
+/bump patch    # 0.1.0 → 0.1.1 (bug fixes)
+
+# Auto-detect from commits (smart!)
+/bump          # Analyzes commits:
+               # - feat!: or BREAKING CHANGE: → major
+               # - feat: → minor
+               # - fix: → patch
+               # - default → patch
+```
+
+**Version Bump Types:**
+- `major` → **MAJOR** bump (0.1.0 → 1.0.0) - Breaking changes
+- `minor` → **MINOR** bump (0.1.0 → 0.2.0) - New features (backward compatible)
+- `patch` → **PATCH** bump (0.1.0 → 0.1.1) - Bug fixes
+- *empty* → **Auto-detect** from conventional commit messages
 
 **Examples:**
+
+**Example 1: Auto-detect from commits (recommended)**
 ```bash
-git commit -m "feat: add expense filtering by date range"
-git push origin main
-# → Version bumped from 0.1.0 to 0.2.0
+# Open a PR with conventional commits
+git checkout -b feature/new-export
+git commit -m "feat: add JSON export"
+git commit -m "feat: add CSV export"
+git push origin feature/new-export
+gh pr create --title "feat: add export functionality"
 
-git commit -m "fix: correct total calculation for negative amounts"
-git push origin main
-# → Version bumped from 0.2.0 to 0.2.1
+# Just type /bump - it detects 'feat:' → MINOR
+# → Comment on the PR: /bump
+# → Workflow analyzes commits: found 'feat:' → MINOR bump
+# → Bumps version from 0.1.0 to 0.2.0
+# → Creates tag v0.2.0
+# → Publishes to crates.io
+```
 
-git commit -m "feat!: redesign expense data structure"
-git push origin main
-# → Version bumped from 0.2.1 to 1.0.0
+**Example 2: Manual override**
+```bash
+# You have mixed commits but want specific bump
+git checkout -b hotfix/critical-bug
+git commit -m "fix: resolve memory leak"
+git commit -m "chore: update dependencies"
+git push origin hotfix/critical-bug
+gh pr create --title "hotfix: resolve memory leak"
+
+# Override auto-detection with explicit PATCH
+# → Comment on the PR: /bump patch
+# → Workflow uses manual bump type: PATCH
+# → Bumps version from 0.1.0 to 0.1.1
+```
+
+**Example 3: Breaking change**
+```bash
+# Breaking API change
+git checkout -b feature/api-redesign
+git commit -m "feat!: redesign expense API (breaking change)"
+git push origin feature/api-redesign
+gh pr create --title "feat!: redesign expense API"
+
+# Auto-detect catches breaking change
+# → Comment on the PR: /bump
+# → Workflow detects 'feat!:' → MAJOR bump
+# → Bumps version from 0.1.0 to 1.0.0
 ```
 
 #### 2. **Pre-Release Workflow**
@@ -513,6 +571,7 @@ Trigger workflows via slash commands in PR comments.
 
 | Command | Description | Example |
 |---------|-------------|---------|
+| `/bump [TYPE]` | Bump version and release | `/bump minor` |
 | `/pre-release [TYPE]` | Create pre-release | `/pre-release alpha` |
 | `/test` | Run test suite | `/test` |
 | `/docs` | Generate documentation | `/docs` |
@@ -520,9 +579,10 @@ Trigger workflows via slash commands in PR comments.
 **Usage Example:**
 ```bash
 # In a PR comment:
-/pre-release beta
-/test
-/docs
+/bump minor          # Bump version and create release
+/pre-release beta    # Create beta pre-release
+/test                # Run test suite
+/docs                # Generate documentation
 ```
 
 **Features:**

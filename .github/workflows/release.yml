@@ -1,10 +1,25 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-      - master
+  # Automatic release on push to main/master (DISABLED - use /bump command instead)
+  # push:
+  #   branches:
+  #     - main
+  #     - master
+
+  # Manual trigger via /bump command or workflow dispatch
+  workflow_dispatch:
+    inputs:
+      bump-type:
+        description: 'Version bump type (leave empty to auto-detect from commits)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - major
+          - minor
+          - patch
+        default: ''
 
 concurrency:
   group: release-${{ github.ref }}
@@ -13,9 +28,6 @@ concurrency:
 jobs:
   check-rust-changes:
     runs-on: ubuntu-latest
-
-    # Prevent infinite loops from version bump commits
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     outputs:
       has_changes: ${{ steps.rust_changes.outputs.has_changes }}
@@ -68,32 +80,42 @@ jobs:
         if: steps.rust_changes.outputs.has_changes == 'true'
         id: semver
         run: |
-          # Get commits since last tag or all commits if no tags exist
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Check if manual bump type was provided
+          MANUAL_BUMP="${{ inputs.bump-type }}"
 
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"%s")
+          if [ -n "$MANUAL_BUMP" ]; then
+            echo "bump=$MANUAL_BUMP" >> $GITHUB_OUTPUT
+            echo "✅ Using manual bump type: $MANUAL_BUMP"
           else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
-          fi
+            echo "🔍 No manual bump type provided, analyzing commits..."
 
-          echo "Analyzing commits:"
-          echo "$COMMITS"
-          echo ""
+            # Get commits since last tag or all commits if no tags exist
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          # Determine bump type based on conventional commits
-          if echo "$COMMITS" | grep -qE "^(BREAKING CHANGE:|.*!:)"; then
-            echo "bump=major" >> $GITHUB_OUTPUT
-            echo "Detected MAJOR bump (breaking change)"
-          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
-            echo "Detected MINOR bump (new feature)"
-          elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?:"; then
-            echo "bump=patch" >> $GITHUB_OUTPUT
-            echo "Detected PATCH bump (bug fix)"
-          else
-            echo "bump=patch" >> $GITHUB_OUTPUT
-            echo "Defaulting to PATCH bump"
+            if [ -z "$LAST_TAG" ]; then
+              COMMITS=$(git log --pretty=format:"%s")
+            else
+              COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
+            fi
+
+            echo "Analyzing commits:"
+            echo "$COMMITS"
+            echo ""
+
+            # Determine bump type based on conventional commits
+            if echo "$COMMITS" | grep -qE "^(BREAKING CHANGE:|.*!:)"; then
+              echo "bump=major" >> $GITHUB_OUTPUT
+              echo "✅ Auto-detected MAJOR bump (breaking change)"
+            elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+              echo "bump=minor" >> $GITHUB_OUTPUT
+              echo "✅ Auto-detected MINOR bump (new feature)"
+            elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?:"; then
+              echo "bump=patch" >> $GITHUB_OUTPUT
+              echo "✅ Auto-detected PATCH bump (bug fix)"
+            else
+              echo "bump=patch" >> $GITHUB_OUTPUT
+              echo "✅ Auto-detected PATCH bump (default)"
+            fi
           fi
 
   bump-version:

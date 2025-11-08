@@ -175,7 +175,7 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --verbose
 
-      - name: Run all tests with all features
+      - name: Run tests with all features
         run: cargo test --all-features --verbose
 
   coverage:
@@ -185,6 +185,13 @@ jobs:
       needs.check-changes.outputs.has_rust_changes == 'true' &&
       (github.event_name != 'workflow_dispatch' || inputs.run_coverage == true)
     runs-on: ubuntu-latest
+    outputs:
+      lines_percent: ${{ steps.coverage.outputs.lines_percent }}
+      lines_covered: ${{ steps.coverage.outputs.lines_covered }}
+      lines_total: ${{ steps.coverage.outputs.lines_total }}
+      branches_percent: ${{ steps.coverage.outputs.branches_percent }}
+      branches_covered: ${{ steps.coverage.outputs.branches_covered }}
+      branches_total: ${{ steps.coverage.outputs.branches_total }}
 
     steps:
       - name: Checkout code
@@ -200,7 +207,42 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: |
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          cargo llvm-cov --all-features --workspace --json --output-path coverage.json
+
+      - name: Parse coverage stats
+        id: coverage
+        run: |
+          # Parse coverage from JSON output
+          if [ -f coverage.json ]; then
+            lines_covered=$(jq '.data[0].totals.lines.covered' coverage.json)
+            lines_total=$(jq '.data[0].totals.lines.count' coverage.json)
+            lines_percent=$(jq '.data[0].totals.lines.percent' coverage.json)
+
+            branches_covered=$(jq '.data[0].totals.branches.covered' coverage.json)
+            branches_total=$(jq '.data[0].totals.branches.count' coverage.json)
+            branches_percent=$(jq '.data[0].totals.branches.percent' coverage.json)
+
+            echo "lines_covered=$lines_covered" >> $GITHUB_OUTPUT
+            echo "lines_total=$lines_total" >> $GITHUB_OUTPUT
+            echo "lines_percent=$lines_percent" >> $GITHUB_OUTPUT
+            echo "branches_covered=$branches_covered" >> $GITHUB_OUTPUT
+            echo "branches_total=$branches_total" >> $GITHUB_OUTPUT
+            echo "branches_percent=$branches_percent" >> $GITHUB_OUTPUT
+
+            echo "📊 Coverage: Lines: $lines_percent% ($lines_covered/$lines_total), Branches: $branches_percent% ($branches_covered/$branches_total)"
+          fi
+
+      - name: Upload coverage files
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            lcov.info
+            coverage.json
+            target/llvm-cov/html/
+          retention-days: 30
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -211,7 +253,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   test-summary:
-    needs: [check-config, check-changes, test]
+    needs: [check-config, check-changes, test, coverage]
     if: always()
     runs-on: ubuntu-latest
     # This job is required for branch protection rules
@@ -257,6 +299,16 @@ jobs:
               coverageResult: '${{ needs.coverage.result }}'
             };
 
+            // Get coverage stats
+            const coverage = {
+              linesPercent: '${{ needs.coverage.outputs.lines_percent }}',
+              linesCovered: '${{ needs.coverage.outputs.lines_covered }}',
+              linesTotal: '${{ needs.coverage.outputs.lines_total }}',
+              branchesPercent: '${{ needs.coverage.outputs.branches_percent }}',
+              branchesCovered: '${{ needs.coverage.outputs.branches_covered }}',
+              branchesTotal: '${{ needs.coverage.outputs.branches_total }}'
+            };
+
             // Build comment body
             let body = '## 🧪 Test Results\n\n';
 
@@ -283,6 +335,24 @@ jobs:
                 body += '| Code Coverage | ✅ Generated |\n';
               }
               body += '\n**Tested on:** Ubuntu (stable, beta), macOS (stable), Windows (stable)\n';
+
+              // Add coverage section if available
+              if (testResults.coverageResult === 'success' && coverage.linesPercent) {
+                body += '\n### 📊 Code Coverage\n\n';
+                body += '| Type | Coverage | Covered/Total |\n';
+                body += '|------|----------|---------------|\n';
+
+                const linesIcon = parseFloat(coverage.linesPercent) >= 80 ? '✅' :
+                                  parseFloat(coverage.linesPercent) >= 60 ? '⚠️' : '❌';
+                const branchesIcon = parseFloat(coverage.branchesPercent) >= 80 ? '✅' :
+                                     parseFloat(coverage.branchesPercent) >= 60 ? '⚠️' : '❌';
+
+                body += `| Lines ${linesIcon} | ${parseFloat(coverage.linesPercent).toFixed(2)}% | ${coverage.linesCovered}/${coverage.linesTotal} |\n`;
+                body += `| Branches ${branchesIcon} | ${parseFloat(coverage.branchesPercent).toFixed(2)}% | ${coverage.branchesCovered}/${coverage.branchesTotal} |\n`;
+
+                body += '\n💡 **Coverage Thresholds:** ✅ ≥80% | ⚠️ ≥60% | ❌ <60%\n';
+                body += `\n[View detailed coverage report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)\n`;
+              }
             } else if (status === 'failure') {
               body += '❌ **Tests Failed**\n\n';
               body += 'Some tests did not pass. Please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\n';
