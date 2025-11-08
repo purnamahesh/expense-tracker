@@ -170,7 +170,7 @@ jobs:
         run: cargo test --lib --verbose
 
       - name: Run integration tests
-        run: cargo test --test '*' --verbose
+        run: cargo test --test integration_test --verbose
 
       - name: Run doc tests
         run: cargo test --doc --verbose

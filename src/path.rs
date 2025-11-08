@@ -77,7 +77,7 @@ mod tests {
     #[fixture]
     fn home_path() -> String {
         #[cfg(target_os = "windows")]
-        let path = env::var("HOMEPATH").unwrap();
+        let path = env::var("USERPROFILE").unwrap();
 
         #[cfg(target_os = "linux")]
         let path = env::var("HOME").unwrap();
