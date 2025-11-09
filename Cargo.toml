@@ -6,16 +6,24 @@ description = """
 expense-tracker is a cli based tool to track expenses.
 """
 readme = "README.md"
-documentation = "https://github.com/purnamahesh/expense-tracker"
+documentation = "https://purnamahesh.github.io/expense-tracker/"
 homepage = "https://github.com/purnamahesh/expense-tracker"
 repository = "https://github.com/purnamahesh/expense-tracker"
-keywords = ["expense", "tracker"]
+keywords = ["expense", "utility", "finance"]
 categories = ["command-line-utilities"]
 license-file = "LICENSE"
 exclude = [
   "/.github/",
   "/hooks/",
-  "/.gitignore"
+  "/.gitignore",
+  "/docs/",
+  "*.sh",
+  "test.sh",
+  "VCS-README.md",
+  "HOOKS-README.md",
+  "ROADMAP.md",
+  "docs-template.md",
+  "tests/resources/"
 ]
 autotests = false
 rust-version = "1.91.0"
