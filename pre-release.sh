@@ -25,8 +25,8 @@ if [[ ! "$PRERELEASE_TYPE" =~ ^(alpha|beta)$ ]]; then
   echo "Usage: $0 [alpha|beta]"
   echo ""
   echo "Examples:"
-  echo "  $0 alpha   # Create alpha pre-release (e.g., 1.0.1a0)"
-  echo "  $0 beta    # Create beta pre-release (e.g., 1.0.1b0)"
+  echo "  $0 alpha   # Create alpha pre-release (e.g., 1.0.1-alpha.0)"
+  echo "  $0 beta    # Create beta pre-release (e.g., 1.0.1-beta.0)"
   echo ""
   exit 1
 fi
@@ -148,36 +148,39 @@ CURRENT_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 echo "  $CURRENT_VERSION"
 echo ""
 
-# Set suffix based on type (a for alpha, b for beta)
+# Set suffix based on type (proper SemVer format)
 if [ "$PRERELEASE_TYPE" = "alpha" ]; then
-  SUFFIX="a"
+  SUFFIX="alpha"
+elif [ "$PRERELEASE_TYPE" = "beta" ]; then
+  SUFFIX="beta"
 else
-  SUFFIX="b"
+  SUFFIX="rc"
 fi
 
 echo -e "${YELLOW}Calculating new pre-release version...${NC}"
 
 # Check if already a pre-release version with same type
-if echo "$CURRENT_VERSION" | grep -qE "${SUFFIX}[0-9]+$"; then
+# Pattern: 1.0.0-alpha.0 or 1.0.0-beta.1 or 1.0.0-rc.2
+if echo "$CURRENT_VERSION" | grep -qE "\-${SUFFIX}\.[0-9]+$"; then
   # Extract base version and current pre-release number
-  BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/${SUFFIX}[0-9]+$//")
+  BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-${SUFFIX}\.[0-9]+$//")
   CURRENT_NUM=$(echo "$CURRENT_VERSION" | grep -oE "[0-9]+$")
   NEW_NUM=$((CURRENT_NUM + 1))
-  NEW_VERSION="${BASE_VERSION}${SUFFIX}${NEW_NUM}"
+  NEW_VERSION="${BASE_VERSION}-${SUFFIX}.${NEW_NUM}"
   echo -e "${BLUE}Incrementing $PRERELEASE_TYPE version${NC}"
 else
-  # Check if it's a different pre-release type (switch from a to b or vice versa)
-  if echo "$CURRENT_VERSION" | grep -qE "[ab][0-9]+$"; then
+  # Check if it's a different pre-release type (switch between alpha/beta/rc)
+  if echo "$CURRENT_VERSION" | grep -qE "-(alpha|beta|rc)\.[0-9]+$"; then
     # Remove old pre-release suffix
-    BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/[ab][0-9]+$//")
-    NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+    BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E "s/-(alpha|beta|rc)\.[0-9]+$//")
+    NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
     echo -e "${BLUE}Switching to $PRERELEASE_TYPE (from different type)${NC}"
   else
     # Not a pre-release, bump patch and add suffix
     echo -e "${BLUE}Creating first $PRERELEASE_TYPE pre-release${NC}"
     cargo bump patch > /dev/null
     BASE_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-    NEW_VERSION="${BASE_VERSION}${SUFFIX}0"
+    NEW_VERSION="${BASE_VERSION}-${SUFFIX}.0"
   fi
 fi
 

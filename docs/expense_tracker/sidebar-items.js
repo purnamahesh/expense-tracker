@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["cli","config","expense","file_parser","path"]};

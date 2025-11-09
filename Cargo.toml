@@ -1,6 +1,6 @@
 [package]
 name = "expense-tracker"
-version = "0.5.2"
+version = "0.5.3-alpha.1"
 edition = "2024"
 description = """
 expense-tracker is a cli based tool to track expenses.
@@ -11,7 +11,6 @@ homepage = "https://github.com/purnamahesh/expense-tracker"
 repository = "https://github.com/purnamahesh/expense-tracker"
 keywords = ["expense", "tracker"]
 categories = ["command-line-utilities"]
-license = "GPL-3.0"
 license-file = "LICENSE"
 exclude = [
   "/.github/",
@@ -19,7 +18,16 @@ exclude = [
   "/.gitignore"
 ]
 autotests = false
-rust-version = "1.90.0"
+rust-version = "1.91.0"
 
 [dependencies]
 chrono = "0.4.42"
+clap = { version = "4.5.51", features = ["derive"] }
+
+[dev-dependencies]
+rstest = "0.26.1"
+assert_cmd = "2.1.1"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"

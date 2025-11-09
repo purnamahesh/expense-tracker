@@ -1,8 +1,12 @@
-pub mod utils;
-pub mod config;
+use clap::Parser;
+use std::error::Error;
 
-use crate::utils::{args_parser::parse_args};
+use expense_tracker::cli;
 
-fn main() {
-    parse_args();
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = cli::ExpenseTrackerArgs::parse();
+
+    cli::parse_sub_commands(args)?;
+
+    Ok(())
 }

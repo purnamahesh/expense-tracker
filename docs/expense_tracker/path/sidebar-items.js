@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["construct_file_path","validate_file_path"]};

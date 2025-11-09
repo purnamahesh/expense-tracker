@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Operation"],"fn":["parse_sub_commands","validate_amount"],"struct":["AddArgs","ExpenseTrackerArgs","FilterArgs"]};
