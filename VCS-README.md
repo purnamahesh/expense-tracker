@@ -213,117 +213,129 @@ When a PR is merged to `main`/`master`, the release workflow analyzes the PR tit
 
 ## **Version Management**
 
-This project includes automated version bumping using semantic versioning (semver).
+This project uses a two-stage automated version management system:
+1. **`/bump` command** - Bumps version in PR (based on commit messages)
+2. **Release on merge** - Publishes to crates.io when PR merges to main/master
 
 ### **Available Tools:**
 
-#### 1. **GitHub Actions (Smart `/bump` command)**
+#### 1. **GitHub Actions `/bump` Command (Smart Auto-Detection)**
 
-**File:** `.github/workflows/release.yml`
+**File:** `.github/workflows/release.yml` (triggered via `.github/workflows/command-dispatch.yml`)
 
-Bumps version and publishes to crates.io when triggered via `/bump` comment on a PR.
+Automatically analyzes PR title prefix and bumps version based on conventional commit format.
 
 **How it works:**
-- **Trigger:** Comment `/bump [major|minor|patch]` on a pull request (or just `/bump` to auto-detect)
-- **Smart Bump Detection:**
-  - If type specified → Use that type
-  - If no type specified → Analyze conventional commit messages to determine bump type
+- **Trigger:** Comment `/bump` on a pull request
+- **Auto-Detection:** Analyzes the PR title prefix to determine bump type:
+  - `feat!:` or `BREAKING CHANGE:` → **MAJOR** (1.0.0 → 2.0.0)
+  - `feat:` → **MINOR** (1.0.0 → 1.1.0)
+  - `fix:`, `patch:`, or `chore:` → **PATCH** (1.0.0 → 1.0.1)
+  - default → **PATCH** (if no recognizable prefix)
 - **Check for Changes:**
-  - Skips release if no `.rs` files changed since last tag
-  - Displays skip message in workflow logs
-- **Job 1 (Check Changes & Determine Type):**
-  - Verifies Rust file changes since last tag
-  - Uses manual bump type OR auto-detects from commits:
-    - `feat!:` or `BREAKING CHANGE:` → **MAJOR**
-    - `feat:` → **MINOR**
-    - `fix:` → **PATCH**
-    - default → **PATCH**
+  - Only runs if `.rs` files changed since last tag
+  - Skips if no Rust code changes detected
+- **Job 1 (Check & Detect):**
+  - Verifies Rust file changes
+  - Analyzes commit messages to determine bump type
 - **Job 2 (Version Bump):**
-  - Uses the reusable `bump-version.yml` workflow
-  - Creates a new branch with version changes
-  - Creates a PR with title: `chore: bump version X.X.X -> Y.Y.Y`
-  - Automatically approves the PR
-  - Automatically merges the PR
-- **Job 3 (Publish):**
-  - Waits for the version bump PR to be merged
-  - Creates a git tag for the new version
-  - Automatically publishes the new version to crates.io
+  - Bumps version in Cargo.toml
+  - Commits changes to PR branch
+  - Does NOT merge the PR (you merge manually)
+- **Job 3 (Publish on Merge):**
+  - Automatically runs when PR merges to main/master
+  - Reads current version from Cargo.toml
+  - Creates git tag
+  - Publishes to crates.io
+  - Creates GitHub release
 
 **Setup:**
-To enable automatic publishing to crates.io, add `CARGO_REGISTRY_TOKEN` to your GitHub repository secrets:
+To enable automatic publishing to crates.io:
 1. Get your token from https://crates.io/settings/tokens
 2. Go to repository Settings → Secrets and variables → Actions
 3. Add new secret: `CARGO_REGISTRY_TOKEN`
 
 **Usage:**
 ```bash
-# In a PR comment:
+# In a PR comment - just type:
+/bump
 
-# Manual bump type (override auto-detection)
-/bump major    # 0.1.0 → 1.0.0 (breaking changes)
-/bump minor    # 0.1.0 → 0.2.0 (new features)
-/bump patch    # 0.1.0 → 0.1.1 (bug fixes)
-
-# Auto-detect from commits (smart!)
-/bump          # Analyzes commits:
-               # - feat!: or BREAKING CHANGE: → major
-               # - feat: → minor
-               # - fix: → patch
-               # - default → patch
+# That's it! No arguments needed.
+# The workflow automatically detects the bump type from your commits.
 ```
 
-**Version Bump Types:**
-- `major` → **MAJOR** bump (0.1.0 → 1.0.0) - Breaking changes
-- `minor` → **MINOR** bump (0.1.0 → 0.2.0) - New features (backward compatible)
-- `patch` → **PATCH** bump (0.1.0 → 0.1.1) - Bug fixes
-- *empty* → **Auto-detect** from conventional commit messages
+**Detection Rules:**
+| Commit Prefix | Bump Type | Example |
+|---------------|-----------|---------|
+| `feat!:` or `BREAKING CHANGE:` | **MAJOR** | 1.0.0 → 2.0.0 |
+| `feat:` | **MINOR** | 1.0.0 → 1.1.0 |
+| `fix:` | **PATCH** | 1.0.0 → 1.0.1 |
+| `patch:` | **PATCH** | 1.0.0 → 1.0.1 |
+| `chore:` | **PATCH** | 1.0.0 → 1.0.1 |
+| (no prefix) | **PATCH** | 1.0.0 → 1.0.1 |
 
-**Examples:**
+**Complete Workflow:**
 
-**Example 1: Auto-detect from commits (recommended)**
+**Example 1: New Feature**
 ```bash
-# Open a PR with conventional commits
-git checkout -b feature/new-export
+# 1. Create PR with conventional commit title
+git checkout -b feature/export
 git commit -m "feat: add JSON export"
 git commit -m "feat: add CSV export"
-git push origin feature/new-export
-gh pr create --title "feat: add export functionality"
+git push origin feature/export
+gh pr create --title "feat: add export functionality"  # ← Title determines bump type!
 
-# Just type /bump - it detects 'feat:' → MINOR
-# → Comment on the PR: /bump
-# → Workflow analyzes commits: found 'feat:' → MINOR bump
-# → Bumps version from 0.1.0 to 0.2.0
+# 2. Comment on PR to bump version
+# → Comment: /bump
+# → Workflow reads PR title "feat: ..." → MINOR bump
+# → Bumps version in Cargo.toml: 0.1.0 → 0.2.0
+# → Commits to your PR branch
+
+# 3. Merge the PR
+gh pr merge
+
+# 4. Automatic publish (no action needed!)
+# → Release workflow triggers on merge
+# → Reads version 0.2.0 from Cargo.toml
 # → Creates tag v0.2.0
 # → Publishes to crates.io
+# → Creates GitHub release
 ```
 
-**Example 2: Manual override**
+**Example 2: Bug Fix**
 ```bash
-# You have mixed commits but want specific bump
-git checkout -b hotfix/critical-bug
-git commit -m "fix: resolve memory leak"
-git commit -m "chore: update dependencies"
-git push origin hotfix/critical-bug
-gh pr create --title "hotfix: resolve memory leak"
+# 1. Create PR with fix title
+git checkout -b fix/memory-leak
+git commit -m "fix: resolve memory leak in parser"
+git push origin fix/memory-leak
+gh pr create --title "fix: resolve memory leak"  # ← Title prefix = PATCH
 
-# Override auto-detection with explicit PATCH
-# → Comment on the PR: /bump patch
-# → Workflow uses manual bump type: PATCH
-# → Bumps version from 0.1.0 to 0.1.1
+# 2. Bump version
+# → Comment: /bump
+# → Reads PR title "fix:" → PATCH bump
+# → 1.0.0 → 1.0.1
+
+# 3. Merge & auto-publish
+gh pr merge
+# → Publishes v1.0.1 automatically
 ```
 
-**Example 3: Breaking change**
+**Example 3: Breaking Change**
 ```bash
-# Breaking API change
+# 1. Create PR with breaking change title
 git checkout -b feature/api-redesign
-git commit -m "feat!: redesign expense API (breaking change)"
+git commit -m "feat!: redesign expense API"
 git push origin feature/api-redesign
-gh pr create --title "feat!: redesign expense API"
+gh pr create --title "feat!: redesign expense API"  # ← "feat!" = MAJOR
 
-# Auto-detect catches breaking change
-# → Comment on the PR: /bump
-# → Workflow detects 'feat!:' → MAJOR bump
-# → Bumps version from 0.1.0 to 1.0.0
+# 2. Bump version
+# → Comment: /bump
+# → Reads PR title "feat!:" → MAJOR bump
+# → 1.0.0 → 2.0.0
+
+# 3. Merge & auto-publish
+gh pr merge
+# → Publishes v2.0.0 automatically
 ```
 
 #### 2. **Pre-Release Workflow**
@@ -569,26 +581,28 @@ Trigger workflows via slash commands in PR comments.
 
 **Available Commands:**
 
-| Command | Description | Example |
-|---------|-------------|---------|
-| `/bump [TYPE]` | Bump version and release | `/bump minor` |
-| `/pre-release [TYPE]` | Create pre-release | `/pre-release alpha` |
-| `/test` | Run test suite | `/test` |
-| `/docs` | Generate documentation | `/docs` |
+| Command | Description | Auto-Detection | Example |
+|---------|-------------|----------------|---------|
+| `/bump` | Auto-detect version bump from commits | ✅ Yes | `/bump` |
+| `/pre-release [TYPE]` | Create pre-release version | ❌ No | `/pre-release alpha` |
+| `/test` | Run test suite | N/A | `/test` |
+| `/docs` | Generate and commit documentation | N/A | `/docs` |
 
-**Usage Example:**
+**Usage Examples:**
 ```bash
 # In a PR comment:
-/bump minor          # Bump version and create release
-/pre-release beta    # Create beta pre-release
-/test                # Run test suite
-/docs                # Generate documentation
+/bump                # Auto-detects bump type from commits (feat:, fix:, etc.)
+/pre-release beta    # Create beta pre-release (alpha, beta, or rc)
+/test                # Run full test suite on PR
+/docs                # Generate docs and commit to PR branch
 ```
 
 **Features:**
 - ✓ Permission checking (requires write/maintain/admin)
-- ✓ Argument parsing (named and unnamed)
+- ✓ Argument parsing for pre-release types
+- ✓ Auto-detection for version bumps
 - ✓ Real-time feedback with reactions and comments
+- ✓ Documentation generation and commit
 - ✓ Triggers workflow_dispatch on target workflows
 
 **How it works:**

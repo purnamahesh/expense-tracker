@@ -29,6 +29,7 @@ jobs:
       pr-branch: ${{ steps.pr-info.outputs.branch }}
       pr-number: ${{ steps.pr-info.outputs.number }}
       pr-sha: ${{ steps.pr-info.outputs.sha }}
+      pr-title: ${{ steps.pr-info.outputs.title }}
       is-valid: ${{ steps.parse.outputs.is-valid }}
     steps:
       - name: Check user permissions
@@ -81,11 +82,13 @@ jobs:
             core.setOutput('branch', pr.data.head.ref);
             core.setOutput('number', context.issue.number);
             core.setOutput('sha', pr.data.head.sha);
+            core.setOutput('title', pr.data.title);
 
             return {
               branch: pr.data.head.ref,
               number: context.issue.number,
-              sha: pr.data.head.sha
+              sha: pr.data.head.sha,
+              title: pr.data.title
             };
 
       - name: Parse command and arguments
@@ -211,7 +214,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `❌ Unknown command: \`/${{ steps.parse.outputs.command }}\`\n\nAvailable commands:\n- \`/pre-release [alpha|beta|rc]\` - Create pre-release version\n- \`/test\` - Run test suite\n- \`/docs\` - Generate documentation\n- \`/bump [major|minor|patch]\` - Bump version and create release`
+              body: `❌ Unknown command: \`/${{ steps.parse.outputs.command }}\`\n\nAvailable commands:\n- \`/pre-release [alpha|beta|rc]\` - Create pre-release version\n- \`/test\` - Run test suite\n- \`/docs\` - Generate and commit documentation\n- \`/bump\` - Auto-detect version bump from commits and create release`
             });
 
   # ============================================
@@ -390,29 +393,6 @@ jobs:
       needs.parse-command.outputs.command == 'bump'
     runs-on: ubuntu-latest
     steps:
-      - name: Parse bump arguments
-        id: args
-        shell: bash
-        run: |
-          ARGS_JSON='${{ needs.parse-command.outputs.args-json }}'
-
-          # Extract bump type (empty if not specified for auto-detection)
-          TYPE=$(echo "$ARGS_JSON" | jq -r '.unnamed[0] // ""')
-
-          # Validate type if provided
-          if [ -n "$TYPE" ] && [[ ! "$TYPE" =~ ^(major|minor|patch)$ ]]; then
-            echo "⚠️ Invalid bump type '$TYPE', will auto-detect from commits"
-            TYPE=""
-          fi
-
-          echo "type=$TYPE" >> $GITHUB_OUTPUT
-
-          if [ -n "$TYPE" ]; then
-            echo "📌 Manual bump type: $TYPE"
-          else
-            echo "🔍 No bump type specified, will auto-detect from commits"
-          fi
-
       - name: Trigger release workflow
         uses: actions/github-script@v7
         with:
@@ -423,7 +403,7 @@ jobs:
               workflow_id: 'release.yml',
               ref: '${{ needs.parse-command.outputs.pr-branch }}',
               inputs: {
-                'bump-type': '${{ steps.args.outputs.type }}'
+                'pr-title': '${{ needs.parse-command.outputs.pr-title }}'
               }
             });
 
@@ -431,23 +411,23 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const bumpType = '${{ steps.args.outputs.type }}';
-            const bumpTypeDisplay = bumpType || 'auto-detect from commits';
-
             const body = `🚀 **Version bump triggered**
 
             **Configuration:**
-            - Bump Type: \`${bumpTypeDisplay}\`
+            - Bump Type: \`auto-detect from PR title\`
+            - PR Title: \`${{ needs.parse-command.outputs.pr-title }}\`
             - Branch: \`${{ needs.parse-command.outputs.pr-branch }}\`
             - Commit: \`${{ needs.parse-command.outputs.pr-sha }}\`
 
             The workflow will:
             1. Check for Rust file changes
-            2. ${bumpType ? 'Use manual bump type' : 'Analyze commits for bump type (feat: → minor, fix: → patch, feat!: → major)'}
+            2. Analyze PR title prefix for bump type:
+               - \`feat!:\` or \`BREAKING CHANGE:\` → **MAJOR** bump
+               - \`feat:\` → **MINOR** bump
+               - \`fix:\` or \`patch:\` or \`chore:\` → **PATCH** bump
             3. Bump version in Cargo.toml
-            4. Create version bump commit
-            5. Create git tag
-            6. Publish to crates.io (if configured)
+            4. Commit version bump to PR branch
+            5. When PR merges → Auto-publish to crates.io
 
             [View workflow runs →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions)`;
 
