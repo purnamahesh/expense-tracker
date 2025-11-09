@@ -66,7 +66,6 @@ jobs:
         run: touch docs/.nojekyll
 
       - name: Commit and push documentation
-        if: inputs.commit-docs != false
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -76,6 +75,53 @@ jobs:
           else
             git commit -m "docs: update documentation [skip ci]"
             git push origin ${{ github.ref_name }}
+          fi
+
+  generate-and-commit:
+    name: Generate and Commit Documentation (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build documentation
+        run: |
+          cargo doc --no-deps --document-private-items --all-features
+
+      - name: Add index redirect
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=expense_tracker/index.html">' > target/doc/index.html
+
+      - name: Copy docs to docs/ directory
+        run: |
+          rm -rf docs
+          cp -r target/doc docs
+
+      - name: Create .nojekyll file
+        run: touch docs/.nojekyll
+
+      - name: Commit and push documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          if git diff --staged --quiet; then
+            echo "✅ No documentation changes to commit"
+          else
+            git commit -m "docs: update documentation [skip ci]"
+            git push origin ${{ github.ref_name }}
+            echo "✅ Documentation committed and pushed"
           fi
 
   check:
