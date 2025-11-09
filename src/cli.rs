@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{self, Args, Parser, Subcommand};
 
 use crate::expense::Expense;
-use crate::path::construct_file_path;
+use crate::path::{construct_file_path, validate_file_path};
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -83,6 +83,7 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
             new_expense.write_expense_to_psv(args.records_path)?;
         }
         Operation::Filter(filter_args) => {
+            validate_file_path(&args.records_path)?;
             Expense::filter_expenses(
                 filter_args.category,
                 filter_args.tag,
@@ -91,9 +92,11 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
             )?;
         }
         Operation::List => {
+            validate_file_path(&args.records_path)?;
             Expense::list_expenses(args.records_path)?;
         }
         Operation::Total => {
+            validate_file_path(&args.records_path)?;
             let total = Expense::expense_total(args.records_path)?;
             println!("Total: {}", total);
         }
@@ -103,16 +106,9 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
 
 #[cfg(test)]
 mod test {
-    use std::{env, path::Path};
 
     use super::*;
-    use rstest::{fixture, rstest};
-
-    #[fixture]
-    fn current_file_name() -> String {
-        let arrgs: Vec<String> = env::args().collect();
-        arrgs[0].to_owned()
-    }
+    use rstest::rstest;
 
     // Testing validate_amount
     #[rstest]
@@ -129,39 +125,4 @@ mod test {
     fn test_validate_amount_invalid(#[case] amount_inp: &str, #[case] err_str: &str) {
         assert_eq!(validate_amount(amount_inp), Err(err_str))
     }
-
-    // Testing validate_file_pat
-    // #[rstest]
-    // fn test_validate_file_path_valid(current_file_name: String) {
-    //     assert!(validate_file_path(&current_file_name).is_ok());
-    // }
-
-    // #[rstest]
-    // fn test_validate_file_path_invalid_file(current_file_name: String) {
-    //     assert!(
-    //         validate_file_path(
-    //             Path::new(&current_file_name)
-    //                 .parent()
-    //                 .unwrap()
-    //                 .join("no_exists.txt")
-    //                 .to_str()
-    //                 .unwrap()
-    //         )
-    //         .is_err()
-    //     );
-    // }
-
-    // #[rstest]
-    // fn test_validate_file_path_invalid_dir(current_file_name: String) {
-    //     assert!(
-    //         validate_file_path(
-    //             Path::new(&current_file_name)
-    //                 .parent()
-    //                 .unwrap()
-    //                 .to_str()
-    //                 .unwrap()
-    //         )
-    //         .is_err()
-    //     );
-    // }
 }

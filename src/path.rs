@@ -1,17 +1,17 @@
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
 
-// fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
-//     let actual_path = construct_file_path(arg);
+pub fn validate_file_path(arg_path: &Option<PathBuf>) -> Result<(), &'static str> {
+    if let Some(path) = arg_path {
+        if !path.exists() {
+            return Err("File not found!");
+        } else if !path.is_file() {
+            return Err("Not a file");
+        }
+    }
 
-//     if !actual_path.exists() {
-//         return Err("File doesn't exist");
-//     } else if !actual_path.is_file() {
-//         return Err("Not a file");
-//     }
-
-//     Ok(actual_path)
-// }
+    Ok(())
+}
 
 pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
     let input_path = Path::new(&path);
@@ -96,6 +96,12 @@ mod tests {
         path
     }
 
+    #[fixture]
+    fn current_file_name() -> Option<PathBuf> {
+        let arrgs: Vec<String> = env::args().collect();
+        Some(PathBuf::from(arrgs[0].to_owned()))
+    }
+
     #[rstest]
     fn test_construct_file_path(home_path: String) {
         assert_eq!(
@@ -111,6 +117,43 @@ mod tests {
         assert_eq!(
             construct_file_path("~/filename.psv"),
             Ok(PathBuf::from(home_path).join("filename.psv"))
+        );
+    }
+
+    // Testing validate_file_pat
+    #[rstest]
+    fn test_validate_file_path_valid(current_file_name: Option<PathBuf>) {
+        assert!(validate_file_path(&current_file_name).is_ok());
+    }
+
+    #[rstest]
+    fn test_validate_file_path_invalid_file(current_file_name: Option<PathBuf>) {
+        assert!(
+            validate_file_path(&Some(
+                current_file_name
+                    .unwrap()
+                    .as_path()
+                    .parent()
+                    .unwrap()
+                    .join("no_exists.txt")
+                    .to_path_buf()
+            ))
+            .is_err()
+        );
+    }
+
+    #[rstest]
+    fn test_validate_file_path_invalid_dir(current_file_name: Option<PathBuf>) {
+        assert!(
+            validate_file_path(&Some(
+                current_file_name
+                    .unwrap()
+                    .as_path()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            ))
+            .is_err()
         );
     }
 }
