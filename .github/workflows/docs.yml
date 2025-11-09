@@ -117,15 +117,37 @@ jobs:
             const success = docCheck === 'success' && linkCheck === 'success';
 
             const body = success
-              ? '✅ **Documentation Check Passed**\n\nDocumentation builds successfully without errors or warnings.'
-              : '❌ **Documentation Check Failed**\n\nPlease fix documentation errors before merging. Check the workflow logs for details.';
+              ? '## ✅ Documentation Check Passed\n\nDocumentation builds successfully without errors or warnings.\n\n---\n*Workflow: [${context.workflow}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*'
+              : '## ❌ Documentation Check Failed\n\nPlease fix documentation errors before merging. Check the workflow logs for details.\n\n---\n*Workflow: [${context.workflow}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*';
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
+              issue_number: context.issue.number
             });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              (comment.body.includes('## ✅ Documentation Check Passed') || comment.body.includes('## ❌ Documentation Check Failed'))
+            );
+
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
 
             // Fail the job if checks failed
             if (!success) {

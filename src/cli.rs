@@ -1,4 +1,5 @@
-use std::{path::PathBuf, process::exit};
+use std::error::Error;
+use std::path::PathBuf;
 
 use clap::{self, Args, Parser, Subcommand};
 
@@ -12,7 +13,8 @@ pub struct ExpenseTrackerArgs {
     #[clap(subcommand)]
     pub command: Operation,
     /// Custom path to psv file where records should be saved.
-    #[arg(short='p', long, value_parser = validate_file_path)]
+    #[arg(short='p', long, value_parser = construct_file_path)]
+    // , value_parser = validate_file_path
     pub records_path: Option<PathBuf>,
 }
 
@@ -26,18 +28,6 @@ pub enum Operation {
     List,
     /// Expense total
     Total,
-}
-
-fn validate_file_path(arg: &str) -> Result<PathBuf, &'static str> {
-    let actual_path = construct_file_path(arg);
-
-    if !actual_path.exists() {
-        return Err("File doesn't exist");
-    } else if !actual_path.is_file() {
-        return Err("Not a file");
-    }
-
-    Ok(actual_path)
 }
 
 fn validate_amount(arg: &str) -> Result<f64, &'static str> {
@@ -81,7 +71,7 @@ pub struct FilterArgs {
     pub tag: Option<Vec<String>>,
 }
 
-pub fn parse_sub_commands(args: ExpenseTrackerArgs) {
+pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         Operation::Add(add_args) => {
             let new_expense = Expense::new(
@@ -90,7 +80,7 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) {
                 add_args.category,
                 add_args.tag,
             );
-            new_expense.write_expense_to_psv(args.records_path);
+            new_expense.write_expense_to_psv(args.records_path)?;
         }
         Operation::Filter(filter_args) => {
             Expense::filter_expenses(
@@ -98,24 +88,17 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) {
                 filter_args.tag,
                 filter_args.amount,
                 args.records_path,
-            );
+            )?;
         }
         Operation::List => {
-            Expense::list_expenses(args.records_path);
+            Expense::list_expenses(args.records_path)?;
         }
         Operation::Total => {
-            let total = Expense::expense_total(args.records_path);
-            match total {
-                Ok(total) => {
-                    println!("Total: {}", total)
-                }
-                Err(err) => {
-                    eprintln!("Error: {}", err);
-                    exit(1);
-                }
-            }
+            let total = Expense::expense_total(args.records_path)?;
+            println!("Total: {}", total);
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -148,37 +131,37 @@ mod test {
     }
 
     // Testing validate_file_pat
-    #[rstest]
-    fn test_validate_file_path_valid(current_file_name: String) {
-        assert!(validate_file_path(&current_file_name).is_ok());
-    }
+    // #[rstest]
+    // fn test_validate_file_path_valid(current_file_name: String) {
+    //     assert!(validate_file_path(&current_file_name).is_ok());
+    // }
 
-    #[rstest]
-    fn test_validate_file_path_invalid_file(current_file_name: String) {
-        assert!(
-            validate_file_path(
-                Path::new(&current_file_name)
-                    .parent()
-                    .unwrap()
-                    .join("no_exists.txt")
-                    .to_str()
-                    .unwrap()
-            )
-            .is_err()
-        );
-    }
+    // #[rstest]
+    // fn test_validate_file_path_invalid_file(current_file_name: String) {
+    //     assert!(
+    //         validate_file_path(
+    //             Path::new(&current_file_name)
+    //                 .parent()
+    //                 .unwrap()
+    //                 .join("no_exists.txt")
+    //                 .to_str()
+    //                 .unwrap()
+    //         )
+    //         .is_err()
+    //     );
+    // }
 
-    #[rstest]
-    fn test_validate_file_path_invalid_dir(current_file_name: String) {
-        assert!(
-            validate_file_path(
-                Path::new(&current_file_name)
-                    .parent()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-            )
-            .is_err()
-        );
-    }
+    // #[rstest]
+    // fn test_validate_file_path_invalid_dir(current_file_name: String) {
+    //     assert!(
+    //         validate_file_path(
+    //             Path::new(&current_file_name)
+    //                 .parent()
+    //                 .unwrap()
+    //                 .to_str()
+    //                 .unwrap()
+    //         )
+    //         .is_err()
+    //     );
+    // }
 }

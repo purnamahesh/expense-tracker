@@ -1,11 +1,11 @@
+use std::error::Error;
 use std::fs::OpenOptions;
-use std::num::ParseFloatError;
 use std::path::{Path, PathBuf};
-use std::{io::Write, process::exit, vec};
+use std::{io::Write, vec};
 
 use chrono::{DateTime, Utc};
 
-use crate::config::TIME_FORMAT;
+use crate::config::{FILE_NAME, TIME_FORMAT};
 use crate::file_parser::read_file_content;
 
 pub struct Expense {
@@ -31,8 +31,8 @@ impl ExpenseList {
     pub fn load_expenses_from_psv(
         &mut self,
         file_path: Option<PathBuf>,
-    ) -> Result<(), ParseFloatError> {
-        let content: String = read_file_content(file_path);
+    ) -> Result<(), Box<dyn Error>> {
+        let content: String = read_file_content(file_path)?;
         for line in content.trim().split('\n') {
             let fields: Vec<&str> = line.trim().split('|').collect();
             self.expense_list.push(Expense {
@@ -44,12 +44,7 @@ impl ExpenseList {
                     .split(',')
                     .map(|s| s.to_string())
                     .collect(),
-                datetime: DateTime::parse_from_str(fields[0], TIME_FORMAT)
-                    .unwrap_or_else(|err| {
-                        eprintln!("Error parsing date: {}", err);
-                        exit(1)
-                    })
-                    .to_utc(),
+                datetime: DateTime::parse_from_str(fields[0], TIME_FORMAT)?.to_utc(),
             });
         }
 
@@ -73,22 +68,17 @@ impl Expense {
         }
     }
 
-    pub fn write_expense_to_psv(&self, file_path: Option<PathBuf>) {
+    pub fn write_expense_to_psv(&self, file_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
         let record = self.to_psv_record();
         let content = record.as_bytes();
 
-        let path = file_path.unwrap_or(Path::new("expense_db.psv").to_path_buf());
+        let path = file_path.unwrap_or(Path::new(FILE_NAME).to_path_buf());
 
-        let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)
-            .unwrap_or_else(|err| panic!("Error: {}", err));
+        let mut file = OpenOptions::new().append(true).create(true).open(path)?;
 
-        file.write_all(content).unwrap_or_else(|err| {
-            eprintln!("Error write to file: {}", err);
-            exit(1);
-        });
+        file.write_all(content)?;
+
+        Ok(())
     }
 
     pub fn to_psv_record(&self) -> String {
@@ -124,15 +114,16 @@ impl Expense {
         }
     }
 
-    pub fn list_expenses(file_path: Option<PathBuf>) {
-        let expense_list = Self::get_expense_list_from_psv(file_path);
+    pub fn list_expenses(file_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let expense_list = Self::get_expense_list_from_psv(file_path)?;
         let x = Vec::from_iter(expense_list.expense_list.iter());
 
         Self::display_expenses(x);
+        Ok(())
     }
 
-    pub fn expense_total(file_path: Option<PathBuf>) -> Result<f64, Box<dyn std::error::Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path);
+    pub fn expense_total(file_path: Option<PathBuf>) -> Result<f64, Box<dyn Error>> {
+        let expense_list = Self::get_expense_list_from_psv(file_path)?;
 
         let mut total: f64 = 0.0;
 
@@ -143,17 +134,14 @@ impl Expense {
         Ok(total)
     }
 
-    fn get_expense_list_from_psv(file_path: Option<PathBuf>) -> ExpenseList {
+    fn get_expense_list_from_psv(
+        file_path: Option<PathBuf>,
+    ) -> Result<ExpenseList, Box<dyn Error>> {
         let mut expense_list = ExpenseList::new();
 
-        expense_list
-            .load_expenses_from_psv(file_path)
-            .unwrap_or_else(|err| {
-                eprintln!("Error : {}", err);
-                exit(1);
-            });
+        expense_list.load_expenses_from_psv(file_path)?;
 
-        expense_list
+        Ok(expense_list)
     }
 
     pub fn filter_expenses(
@@ -161,8 +149,8 @@ impl Expense {
         tags: Option<Vec<String>>,
         amount: Option<f64>,
         file_path: Option<PathBuf>,
-    ) {
-        let expense_list = Self::get_expense_list_from_psv(file_path);
+    ) -> Result<(), Box<dyn Error>> {
+        let expense_list = Self::get_expense_list_from_psv(file_path)?;
 
         let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
             let amount_flag = if let Some(amount) = amount {
@@ -196,6 +184,7 @@ impl Expense {
         let x = filtered_list.collect::<Vec<_>>();
 
         Self::display_expenses(x);
+        Ok(())
     }
 }
 
@@ -229,17 +218,9 @@ mod tests {
     // fn test_filter_expense(mock_expenses_list: ExpenseList) {}
 
     #[rstest]
-    fn test_expense_total(mock_expenses_path: PathBuf) {
-        let total = Expense::expense_total(Some(mock_expenses_path));
-        match total {
-            Ok(total) => {
-                assert_eq!(total, 1044.0);
-            }
-            Err(err) => {
-                eprintln!("Error: {}", err);
-                exit(1);
-            }
-        }
-        // display_expenses(mock_expenses_list.expense_list.iter().collect::<Vec<&Expense>>());
+    fn test_expense_total(mock_expenses_path: PathBuf) -> Result<(), Box<dyn Error>> {
+        let total = Expense::expense_total(Some(mock_expenses_path))?;
+        assert_eq!(total, 1044.0);
+        Ok(())
     }
 }
