@@ -1,5 +1,12 @@
 use std::env::home_dir;
+use std::error::Error;
+use std::fs::DirBuilder;
 use std::path::{Path, PathBuf};
+use std::fs::OpenOptions;
+use std::io::{ErrorKind, Read};
+use std::process::exit;
+
+use crate::config::FILE_NAME;
 
 pub fn validate_file_path(arg_path: &Option<PathBuf>) -> Result<(), &'static str> {
     if let Some(path) = arg_path {
@@ -38,40 +45,69 @@ pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
     Ok(input_path.to_path_buf())
 }
 
-// use std::fs::DirBuilder;
-// use std::process::exit;
-// pub fn _initiate_config_file() {
-//     let config_dir = match home_dir() {
-//         Some(home_dir) => {
-//             let config_dir: std::path::PathBuf = home_dir.join(Path::new("expense-tracker/"));
-//             if !config_dir.exists() {
-//                 DirBuilder::new()
-//                     .recursive(false)
-//                     .create(config_dir.as_path())
-//                     .unwrap_or_else(|err| {
-//                         eprintln!(
-//                             "Error creating directory at {}\nError: {}",
-//                             config_dir.display(),
-//                             err
-//                         );
-//                         exit(1)
-//                     });
-//             };
-//             config_dir
-//         }
-//         None => {
-//             eprint!("Home directory might have "); // TODO
-//             exit(1);
-//         }
-//     };
+pub fn validate_project_dir(dir_name: &Option<PathBuf>) -> Result<(), Box<dyn Error>> {
+    let p_dir = dir_name.as_ref().unwrap();
 
-//     let db_file = config_dir.join(Path::new("expense_db.psv"));
+    if !p_dir.exists() {
+        DirBuilder::new()
+            .recursive(true)
+            .create(p_dir.as_path())
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "Error creating directory at {}\nError: {}",
+                    &p_dir.display(),
+                    err
+                );
+            });
+    }
 
-//     if db_file.exists() {};
+    Ok(())
+}
 
-//     // let y = Path::new(home_dir);
+pub fn generate_read_path(
+    file_path: Option<PathBuf>,
+    project_dir: &Option<PathBuf>,
+) -> Result<PathBuf, Box<dyn Error + 'static>> {
+    validate_project_dir(project_dir)?;
+    let p_dir = project_dir.as_ref().unwrap();
+    let path = file_path.unwrap_or(p_dir.join(FILE_NAME));
+    Ok(path)
+}
 
-//     // println!("{}", x.display());
+pub fn read_file_content(
+    file_path: Option<PathBuf>,
+    project_dir: &Option<PathBuf>,
+) -> Result<String, Box<dyn Error + 'static>> {
+    let path = generate_read_path(file_path, project_dir)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .open(&path)
+        .unwrap_or_else(|err| {
+            if err.kind() == ErrorKind::NotFound {
+                eprintln!("No records yet at {}", path.display());
+                exit(1)
+            } else {
+                eprintln!("Error {}", err);
+                exit(1)
+            };
+        });
+
+    let mut content = String::from("");
+
+    file.read_to_string(&mut content)?;
+
+    Ok(content)
+}
+
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+
+//     #[test]
+//     #[should_panic(expected="No records yet at ")]
+//     fn test_load_expenses_from_psv() {
+//         let _ = read_file_content(Some("./expense_db.csv"));
+//     }
 // }
 
 #[cfg(test)]

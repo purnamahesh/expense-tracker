@@ -1,12 +1,12 @@
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{io::Write, vec};
 
 use chrono::{DateTime, Utc};
 
-use crate::config::{FILE_NAME, TIME_FORMAT};
-use crate::file_parser::read_file_content;
+use crate::config::TIME_FORMAT;
+use crate::path::{generate_read_path, read_file_content};
 
 pub struct Expense {
     amount: f64,
@@ -31,8 +31,9 @@ impl ExpenseList {
     pub fn load_expenses_from_psv(
         &mut self,
         file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
-        let content: String = read_file_content(file_path)?;
+        let content: String = read_file_content(file_path, project_dir)?;
         for line in content.trim().split('\n') {
             let fields: Vec<&str> = line.trim().split('|').collect();
             self.expense_list.push(Expense {
@@ -68,11 +69,15 @@ impl Expense {
         }
     }
 
-    pub fn write_expense_to_psv(&self, file_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
+    pub fn write_expense_to_psv(
+        &self,
+        file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
+    ) -> Result<(), Box<dyn Error>> {
         let record = self.to_psv_record();
         let content = record.as_bytes();
 
-        let path = file_path.unwrap_or(Path::new(FILE_NAME).to_path_buf());
+        let path = generate_read_path(file_path, project_dir)?;
 
         let mut file = OpenOptions::new().append(true).create(true).open(path)?;
 
@@ -114,16 +119,22 @@ impl Expense {
         }
     }
 
-    pub fn list_expenses(file_path: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path)?;
+    pub fn list_expenses(
+        file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
+    ) -> Result<(), Box<dyn Error>> {
+        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
         let x = Vec::from_iter(expense_list.expense_list.iter());
 
         Self::display_expenses(x);
         Ok(())
     }
 
-    pub fn expense_total(file_path: Option<PathBuf>) -> Result<f64, Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path)?;
+    pub fn expense_total(
+        file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
+    ) -> Result<f64, Box<dyn Error>> {
+        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
 
         let mut total: f64 = 0.0;
 
@@ -136,10 +147,11 @@ impl Expense {
 
     fn get_expense_list_from_psv(
         file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
     ) -> Result<ExpenseList, Box<dyn Error>> {
         let mut expense_list = ExpenseList::new();
 
-        expense_list.load_expenses_from_psv(file_path)?;
+        expense_list.load_expenses_from_psv(file_path, project_dir)?;
 
         Ok(expense_list)
     }
@@ -149,8 +161,9 @@ impl Expense {
         tags: Option<Vec<String>>,
         amount: Option<f64>,
         file_path: Option<PathBuf>,
+        project_dir: &Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path)?;
+        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
 
         let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
             let amount_flag = if let Some(amount) = amount {
@@ -191,6 +204,7 @@ impl Expense {
 #[cfg(test)]
 mod tests {
 
+    use directories::ProjectDirs;
     use rstest::{fixture, rstest};
 
     use super::*;
@@ -203,10 +217,16 @@ mod tests {
     }
 
     #[fixture]
-    fn mock_expenses_list(mock_expenses_path: PathBuf) -> ExpenseList {
+    fn project_dir() -> PathBuf {
+        let p_dir = ProjectDirs::from("", "", "expense-tracker");
+        p_dir.unwrap().data_dir().to_path_buf()
+    }
+
+    #[fixture]
+    fn mock_expenses_list(mock_expenses_path: PathBuf, project_dir: PathBuf) -> ExpenseList {
         let mut mock_expenses_list = ExpenseList::new();
         mock_expenses_list
-            .load_expenses_from_psv(Some(mock_expenses_path))
+            .load_expenses_from_psv(Some(mock_expenses_path), &Some(project_dir))
             .unwrap_or_else(|err| {
                 eprintln!("Failed to parse amount : {}", err);
             });
@@ -218,8 +238,11 @@ mod tests {
     // fn test_filter_expense(mock_expenses_list: ExpenseList) {}
 
     #[rstest]
-    fn test_expense_total(mock_expenses_path: PathBuf) -> Result<(), Box<dyn Error>> {
-        let total = Expense::expense_total(Some(mock_expenses_path))?;
+    fn test_expense_total(
+        mock_expenses_path: PathBuf,
+        project_dir: PathBuf,
+    ) -> Result<(), Box<dyn Error>> {
+        let total = Expense::expense_total(Some(mock_expenses_path), &Some(project_dir))?;
         assert_eq!(total, 1044.0);
         Ok(())
     }
