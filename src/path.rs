@@ -1,9 +1,9 @@
-use std::env::home_dir;
+use directories;
 use std::error::Error;
 use std::fs::DirBuilder;
-use std::path::{Path, PathBuf};
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read};
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use crate::config::FILE_NAME;
@@ -31,11 +31,12 @@ pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
             };
             let path_from_home_dir = Path::new(input_path_string);
 
-            if let Some(mut hdir) = home_dir() {
+            if let Some(base_dirs) = directories::BaseDirs::new() {
+                let mut hdir = base_dirs.home_dir().to_path_buf();
                 hdir.push(path_from_home_dir);
                 return Ok(hdir);
             } else {
-                return Err("Error constructing home directory");
+                return Err("Unable to fetch homedir");
             }
         } else {
             return Ok(input_path.to_path_buf());
