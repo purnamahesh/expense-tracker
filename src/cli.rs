@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use clap::{self, Args, Parser, Subcommand};
 use directories::ProjectDirs;
 
-use crate::expense::Expense;
-use crate::path::{construct_file_path, validate_file_path};
+use crate::{models::ExpenseRecord, path::{construct_file_path, validate_file_path}, sqlite_conn::create_db_if_not_exists};
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -24,10 +23,12 @@ pub struct ExpenseTrackerArgs {
 }
 
 impl ExpenseTrackerArgs {
-    pub fn set_dirs(&mut self) -> Result<(), &'static str> {
+    pub async fn initialize_db(&mut self) -> Result<(), &'static str> {
         if let Some(p) = ProjectDirs::from("", "", "expense-tracker") {
             self.config_dir = Some(p.config_dir().to_path_buf());
             self.data_dir = Some(p.data_dir().to_path_buf());
+
+            create_db_if_not_exists(self.data_dir.as_ref()).await?;
         } else {
             return Err("No valid home directory path detected!");
         };
@@ -92,7 +93,7 @@ pub struct FilterArgs {
 pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         Operation::Add(add_args) => {
-            let new_expense = Expense::new(
+            let new_expense = ExpenseRecord::new(
                 add_args.amount,
                 add_args.description,
                 add_args.category,
@@ -102,7 +103,7 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
         }
         Operation::Filter(filter_args) => {
             validate_file_path(&args.records_path)?;
-            Expense::filter_expenses(
+            ExpenseRecord::filter_expenses(
                 filter_args.category,
                 filter_args.tag,
                 filter_args.amount,
@@ -112,11 +113,11 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
         }
         Operation::List => {
             validate_file_path(&args.records_path)?;
-            Expense::list_expenses(args.records_path, &args.data_dir)?;
+            ExpenseRecord::list_expenses(args.records_path, &args.data_dir)?;
         }
         Operation::Total => {
             validate_file_path(&args.records_path)?;
-            let total = Expense::expense_total(args.records_path, &args.data_dir)?;
+            let total = ExpenseRecord::expense_total(args.records_path, &args.data_dir)?;
             println!("Total: {}", total);
         }
     }
