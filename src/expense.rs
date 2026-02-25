@@ -5,20 +5,13 @@ use std::{io::Write, vec};
 
 use chrono::{DateTime, Utc};
 
-use crate::config::TIME_FORMAT;
+use crate::constants::TIME_FORMAT;
+use crate::models::ExpenseRecord;
 use crate::path::{generate_read_path, read_file_content};
-
-pub struct Expense {
-    amount: f64,
-    category: String,
-    tags: Vec<String>,
-    datetime: DateTime<Utc>,
-    description: Option<String>,
-}
 
 #[derive(Default)]
 pub struct ExpenseList {
-    expense_list: Vec<Expense>,
+    expense_list: Vec<ExpenseRecord>,
 }
 
 impl ExpenseList {
@@ -36,7 +29,7 @@ impl ExpenseList {
         let content: String = read_file_content(file_path, project_dir)?;
         for line in content.trim().split('\n') {
             let fields: Vec<&str> = line.trim().split('|').collect();
-            self.expense_list.push(Expense {
+            self.expense_list.push(ExpenseRecord {
                 amount: fields[2].trim().parse::<f64>()?,
                 description: Some(fields[3][1..fields[3].len() - 1].to_owned()),
                 category: fields[1].to_owned(),
@@ -53,14 +46,14 @@ impl ExpenseList {
     }
 }
 
-impl Expense {
+impl ExpenseRecord {
     pub fn new(
         amount: f64,
         description: Option<String>,
         category: String,
         tags: Option<Vec<String>>,
-    ) -> Expense {
-        Expense {
+    ) -> ExpenseRecord {
+        ExpenseRecord {
             amount,
             description,
             category,
@@ -97,7 +90,7 @@ impl Expense {
         )
     }
 
-    pub fn display_expenses(expense_list: Vec<&Expense>) {
+    pub fn display_expenses(expense_list: Vec<&ExpenseRecord>) {
         println!(
             "{:<30}{:<20}{:<10}{:<50}{:<10}",
             "Time", "Category", "Amount", "Description", "Tags"
@@ -165,7 +158,7 @@ impl Expense {
     ) -> Result<(), Box<dyn Error>> {
         let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
 
-        let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
+        let filtered_list = expense_list.expense_list.iter().filter(|exp: &&ExpenseRecord| {
             let amount_flag = if let Some(amount) = amount {
                 amount == exp.amount
             } else {
@@ -242,7 +235,7 @@ mod tests {
         mock_expenses_path: PathBuf,
         project_dir: PathBuf,
     ) -> Result<(), Box<dyn Error>> {
-        let total = Expense::expense_total(Some(mock_expenses_path), &Some(project_dir))?;
+        let total = ExpenseRecord::expense_total(Some(mock_expenses_path), &Some(project_dir))?;
         assert_eq!(total, 1044.0);
         Ok(())
     }

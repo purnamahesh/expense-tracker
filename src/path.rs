@@ -6,7 +6,7 @@ use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use crate::config::FILE_NAME;
+use crate::constants::FILE_NAME;
 
 pub fn validate_file_path(arg_path: &Option<PathBuf>) -> Result<(), &'static str> {
     if let Some(path) = arg_path {
