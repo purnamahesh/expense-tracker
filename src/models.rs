@@ -1,12 +1,24 @@
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-use chrono::{Utc, DateTime};
+use std::ops::Deref;
 
-#[derive(Debug, FromRow, Serialize, Deserialize)]
+use serde::{Deserialize, Serialize};
+use sqlx::{Decode, FromRow, Type};
+
+#[derive(Debug, FromRow, Serialize, Type, Decode)]
 pub struct ExpenseRecord {
     pub amount: f64,
     pub category: String,
-    pub tags: Vec<String>,
-    pub datetime: DateTime<Utc>,
+    pub datetime: i64,
+    pub tags: Option<String>,
     pub description: Option<String>,
 }
+
+#[derive(Debug, FromRow)]
+pub struct ExpenseTotal {
+    pub total: f64
+}
+
+// impl Decode for ExpenseRecord {
+//     fn decode(value: <DB as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+
+//     }
+// }

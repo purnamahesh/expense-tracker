@@ -1,15 +1,16 @@
 use clap::Parser;
+use pense::sqlite_conn::initialize_db;
 use std::error::Error;
 
-use expense_tracker::cli;
+use pense::cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + 'static>> {
-    let mut args = cli::ExpenseTrackerArgs::parse();
+    let args = cli::ExpenseTrackerArgs::parse();
 
-    args.initialize_db().await?;
+    let conn = initialize_db().await?;
 
-    cli::parse_sub_commands(args)?;
+    cli::parse_sub_commands(args, conn).await?;
 
     Ok(())
 }

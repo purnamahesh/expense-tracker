@@ -65,40 +65,12 @@ pub fn validate_project_dir(dir_name: &Option<PathBuf>) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-pub fn generate_read_path(
-    file_path: Option<PathBuf>,
-    project_dir: &Option<PathBuf>,
-) -> Result<PathBuf, Box<dyn Error + 'static>> {
-    validate_project_dir(project_dir)?;
-    let p_dir = project_dir.as_ref().unwrap();
-    let path = file_path.unwrap_or(p_dir.join(FILE_NAME));
-    Ok(path)
-}
-
-pub fn read_file_content(
-    file_path: Option<PathBuf>,
-    project_dir: &Option<PathBuf>,
-) -> Result<String, Box<dyn Error + 'static>> {
-    let path = generate_read_path(file_path, project_dir)?;
-    let mut file = OpenOptions::new()
-        .read(true)
-        .open(&path)
-        .unwrap_or_else(|err| {
-            if err.kind() == ErrorKind::NotFound {
-                eprintln!("No records yet at {}", path.display());
-                exit(1)
-            } else {
-                eprintln!("Error {}", err);
-                exit(1)
-            };
-        });
-
-    let mut content = String::from("");
-
-    file.read_to_string(&mut content)?;
-
-    Ok(content)
-}
+// pub fn generate_read_path(file_path: Option<PathBuf>) -> Result<PathBuf, Box<dyn Error + 'static>> {
+//     validate_project_dir(project_dir)?;
+//     let p_dir = project_dir.as_ref().unwrap();
+//     let path = file_path.unwrap_or(p_dir.join(FILE_NAME));
+//     Ok(path)
+// }
 
 // #[cfg(test)]
 // mod test {

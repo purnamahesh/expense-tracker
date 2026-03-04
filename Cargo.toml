@@ -1,5 +1,5 @@
 [package]
-name = "expense-tracker"
+name = "pense"
 version = "0.7.1"
 edition = "2024"
 description = """
@@ -33,8 +33,9 @@ chrono = { version = "0.4.42", features = ["serde"] }
 clap = { version = "4.5.51", features = ["derive"] }
 directories = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
-sqlx = { version = "0.8.6", features = ["sqlite"] }
+sqlx = { version = "0.8.6", features = ["sqlite", "macros", "derive", "runtime-tokio", "chrono"] }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+uuid = { version = "1.21.0", features = ["v4"] }
 
 [dev-dependencies]
 rstest = "0.26.1"

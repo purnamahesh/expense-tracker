@@ -2,9 +2,12 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use clap::{self, Args, Parser, Subcommand};
-use directories::ProjectDirs;
+use sqlx::{Pool, Sqlite};
 
-use crate::{models::ExpenseRecord, path::{construct_file_path, validate_file_path}, sqlite_conn::create_db_if_not_exists};
+use crate::{
+    models::ExpenseRecord,
+    path::{construct_file_path, validate_file_path},
+};
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -12,29 +15,14 @@ use crate::{models::ExpenseRecord, path::{construct_file_path, validate_file_pat
 pub struct ExpenseTrackerArgs {
     #[clap(subcommand)]
     pub command: Operation,
-    /// Custom path to psv file where records should be saved.
+    /// Custom path to sqlitedb file where records should be saved.
     #[arg(short='p', long, value_parser = construct_file_path)]
     pub records_path: Option<PathBuf>,
     /// User profile
     #[arg(short, long)]
     pub user: Option<String>,
-    data_dir: Option<PathBuf>,
-    config_dir: Option<PathBuf>,
-}
-
-impl ExpenseTrackerArgs {
-    pub async fn initialize_db(&mut self) -> Result<(), &'static str> {
-        if let Some(p) = ProjectDirs::from("", "", "expense-tracker") {
-            self.config_dir = Some(p.config_dir().to_path_buf());
-            self.data_dir = Some(p.data_dir().to_path_buf());
-
-            create_db_if_not_exists(self.data_dir.as_ref()).await?;
-        } else {
-            return Err("No valid home directory path detected!");
-        };
-
-        Ok(())
-    }
+    // data_dir: Option<PathBuf>,
+    // config_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -73,7 +61,7 @@ pub struct AddArgs {
     pub description: Option<String>,
     /// tags
     #[arg(short, long)]
-    pub tag: Option<Vec<String>>,
+    pub tag: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -90,7 +78,10 @@ pub struct FilterArgs {
     pub tag: Option<Vec<String>>,
 }
 
-pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
+pub async fn parse_sub_commands(
+    args: ExpenseTrackerArgs,
+    conn: Pool<Sqlite>,
+) -> Result<(), Box<dyn Error>> {
     match args.command {
         Operation::Add(add_args) => {
             let new_expense = ExpenseRecord::new(
@@ -99,25 +90,26 @@ pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>
                 add_args.category,
                 add_args.tag,
             );
-            new_expense.write_expense_to_psv(args.records_path, &args.data_dir)?;
+            new_expense
+                .insert_expense_record(args.records_path, conn)
+                .await?;
         }
         Operation::Filter(filter_args) => {
             validate_file_path(&args.records_path)?;
-            ExpenseRecord::filter_expenses(
-                filter_args.category,
-                filter_args.tag,
-                filter_args.amount,
-                args.records_path,
-                &args.data_dir,
-            )?;
+            // ExpenseRecord::filter_expenses(
+            //     filter_args.category,
+            //     filter_args.tag,
+            //     filter_args.amount,
+            //     args.records_path,
+            // )?;
         }
         Operation::List => {
             validate_file_path(&args.records_path)?;
-            ExpenseRecord::list_expenses(args.records_path, &args.data_dir)?;
+            ExpenseRecord::list_expenses(args.records_path, conn).await?;
         }
         Operation::Total => {
             validate_file_path(&args.records_path)?;
-            let total = ExpenseRecord::expense_total(args.records_path, &args.data_dir)?;
+            let total = ExpenseRecord::expense_total(args.records_path, conn).await?;
             println!("Total: {}", total);
         }
     }
