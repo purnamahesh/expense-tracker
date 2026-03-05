@@ -2,11 +2,11 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use clap::{self, Args, Parser, Subcommand};
-use sqlx::{Pool, Sqlite};
+use crate::sqlite_conn::initialize_db;
 
 use crate::{
     models::ExpenseRecord,
-    path::{construct_file_path, validate_file_path},
+    path::construct_file_path,
 };
 
 #[derive(Parser, Debug)]
@@ -67,7 +67,7 @@ pub struct AddArgs {
 #[derive(Args, Debug)]
 #[group(required = true)]
 pub struct FilterArgs {
-    /// expense amount
+    /// amount equals
     #[arg(short, long)]
     pub amount: Option<f64>,
     /// expense category
@@ -76,12 +76,18 @@ pub struct FilterArgs {
     /// tags
     #[arg(short, long)]
     pub tag: Option<Vec<String>>,
+    /// amount greater than and equal to
+    #[arg(long)]
+    pub ge: Option<String>,
+    /// amount less than and equal to
+    #[arg(long)]
+    pub le: Option<String>,
 }
 
 pub async fn parse_sub_commands(
     args: ExpenseTrackerArgs,
-    conn: Pool<Sqlite>,
 ) -> Result<(), Box<dyn Error>> {
+    let conn = initialize_db(args.records_path).await?;
     match args.command {
         Operation::Add(add_args) => {
             let new_expense = ExpenseRecord::new(
@@ -91,11 +97,10 @@ pub async fn parse_sub_commands(
                 add_args.tag,
             );
             new_expense
-                .insert_expense_record(args.records_path, conn)
+                .insert_expense_record(conn)
                 .await?;
         }
         Operation::Filter(filter_args) => {
-            validate_file_path(&args.records_path)?;
             // ExpenseRecord::filter_expenses(
             //     filter_args.category,
             //     filter_args.tag,
@@ -104,12 +109,10 @@ pub async fn parse_sub_commands(
             // )?;
         }
         Operation::List => {
-            validate_file_path(&args.records_path)?;
-            ExpenseRecord::list_expenses(args.records_path, conn).await?;
+            ExpenseRecord::list_expenses(conn).await?;
         }
         Operation::Total => {
-            validate_file_path(&args.records_path)?;
-            let total = ExpenseRecord::expense_total(args.records_path, conn).await?;
+            let total = ExpenseRecord::expense_total(conn).await?;
             println!("Total: {}", total);
         }
     }

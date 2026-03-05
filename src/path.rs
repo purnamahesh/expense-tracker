@@ -1,20 +1,38 @@
 use directories;
 use std::error::Error;
 use std::fs::DirBuilder;
-use std::fs::OpenOptions;
-use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use crate::constants::FILE_NAME;
+use directories::ProjectDirs;
 
-pub fn validate_file_path(arg_path: &Option<PathBuf>) -> Result<(), &'static str> {
-    if let Some(path) = arg_path {
-        if !path.exists() {
-            return Err("File not found!");
-        } else if !path.is_file() {
-            return Err("Not a file");
-        }
+
+pub fn get_project_db_file_path() -> Result<String, Box<dyn Error>> {
+    if let Some(p) = ProjectDirs::from("", "", "expense-tracker") {
+        // self.config_dir = Some(p.config_dir().to_path_buf());
+        let data_dir = p.data_dir().to_path_buf();
+
+        let path = match data_dir.to_str() {
+            Some(path_str) => path_str,
+            None => {
+                eprintln!("utf-8: Failed to get data dir");
+                exit(1);
+            }
+        };
+        // let conn_str = format!("sqlite://{}/{}", path, "data.db");
+        let filename = format!("{}/{}", path, "data.db");
+
+        Ok(filename)
+    } else {
+        return Err("Non utf-8 character in home path".into());
+    }
+}
+
+pub fn validate_file_path(path: &PathBuf) -> Result<(), &'static str> {
+    if !path.exists() {
+        return Err("File not found!");
+    } else if !path.is_file() {
+        return Err("Not a file");
     }
 
     Ok(())
@@ -23,7 +41,7 @@ pub fn validate_file_path(arg_path: &Option<PathBuf>) -> Result<(), &'static str
 pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
     let input_path = Path::new(&path);
 
-    if input_path.is_relative() {
+    let path = if input_path.is_relative() {
         if input_path.starts_with("~/") {
             let input_path_string = match input_path.to_str() {
                 Some(path) => &path[2..],
@@ -34,14 +52,20 @@ pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
             if let Some(base_dirs) = directories::BaseDirs::new() {
                 let mut hdir = base_dirs.home_dir().to_path_buf();
                 hdir.push(path_from_home_dir);
-                return Ok(hdir);
+                // return Ok(hdir);
+                hdir
             } else {
                 return Err("Unable to fetch homedir");
             }
         } else {
-            return Ok(input_path.to_path_buf());
+            // return Ok(input_path.to_path_buf());
+            input_path.to_path_buf()
         }
-    }
+    } else {
+        input_path.to_path_buf()
+    };
+
+    validate_file_path(&path);
 
     Ok(input_path.to_path_buf())
 }

@@ -1,10 +1,9 @@
 use std::error::Error;
-use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::{io::Write, vec};
+use std::vec;
 
 use chrono::{DateTime, Utc};
-use sqlx::{Execute, Pool, Sqlite, sqlite};
+use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
 use crate::constants::TIME_FORMAT;
@@ -42,10 +41,8 @@ impl ExpenseRecord {
 
     pub async fn insert_expense_record(
         &self,
-        file_path: Option<PathBuf>,
         conn: Pool<Sqlite>,
     ) -> Result<(), sqlx::Error> {
-        
         let res= sqlx::query("INSERT INTO expense (id, category, amount, tags, datetime, description) values ($1, $2, $3, $4, $5, $6)")
             .bind(Uuid::new_v4().to_string())
             .bind(&self.category)
@@ -86,7 +83,6 @@ impl ExpenseRecord {
     }
 
     pub async fn list_expenses(
-        file_path: Option<PathBuf>,
         conn: Pool<Sqlite>,
     ) -> Result<(), Box<dyn Error>> {
         let expense_list = sqlx::query_as::<_, ExpenseRecord>(
@@ -100,63 +96,60 @@ impl ExpenseRecord {
     }
 
     pub async fn expense_total(
-        file_path: Option<PathBuf>,
         conn: Pool<Sqlite>,
     ) -> Result<f64, Box<dyn Error>> {
-        let expense_total = sqlx::query_as::<_, ExpenseTotal>(
-            "SELECT sum(amount) total FROM expense",
-        )
-        .fetch_one(&conn)
-        .await?;
+        let expense_total =
+            sqlx::query_as::<_, ExpenseTotal>("SELECT sum(amount) total FROM expense")
+                .fetch_one(&conn)
+                .await?;
 
         Ok(expense_total.total)
     }
 
-    // pub fn filter_expenses(
-    //     category: Option<String>,
-    //     tags: Option<Vec<String>>,
-    //     amount: Option<f64>,
-    //     file_path: Option<PathBuf>,
-    // ) -> Result<(), Box<dyn Error>> {
-    //     let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
+    pub fn filter_expenses(
+        category: Option<String>,
+        tags: Option<Vec<String>>,
+        amount: Option<f64>,
+    ) -> Result<(), Box<dyn Error>> {
+        // let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
 
-    //     let filtered_list = expense_list
-    //         .expense_list
-    //         .iter()
-    //         .filter(|exp: &&ExpenseRecord| {
-    //             let amount_flag = if let Some(amount) = amount {
-    //                 amount == exp.amount
-    //             } else {
-    //                 true
-    //             };
+        // let filtered_list = expense_list
+        //     .expense_list
+        //     .iter()
+        //     .filter(|exp: &&ExpenseRecord| {
+        //         let amount_flag = if let Some(amount) = amount {
+        //             amount == exp.amount
+        //         } else {
+        //             true
+        //         };
 
-    //             let category_flag = if let Some(category) = &category {
-    //                 category.as_str() == exp.category.as_str()
-    //             } else {
-    //                 true
-    //             };
+        //         let category_flag = if let Some(category) = &category {
+        //             category.as_str() == exp.category.as_str()
+        //         } else {
+        //             true
+        //         };
 
-    //             let tags_flag = if let Some(tags) = &tags {
-    //                 let mut flag = false;
-    //                 if exp.tags.is_empty() {
-    //                     flag = false
-    //                 } else {
-    //                     for tag in tags {
-    //                         flag = exp.tags.contains(tag);
-    //                     }
-    //                 }
-    //                 flag
-    //             } else {
-    //                 true
-    //             };
+        //         let tags_flag = if let Some(tags) = &tags {
+        //             let mut flag = false;
+        //             if exp.tags.is_empty() {
+        //                 flag = false
+        //             } else {
+        //                 for tag in tags {
+        //                     flag = exp.tags.contains(tag);
+        //                 }
+        //             }
+        //             flag
+        //         } else {
+        //             true
+        //         };
 
-    //             amount_flag && category_flag && tags_flag
-    //         });
-    //     let x = filtered_list.collect::<Vec<_>>();
+        //         amount_flag && category_flag && tags_flag
+        //     });
+        // let x = filtered_list.collect::<Vec<_>>();
 
-    //     Self::display_expenses(x);
-    //     Ok(())
-    // }
+        // Self::display_expenses(x);
+        Ok(())
+    }
 }
 
 // #[cfg(test)]

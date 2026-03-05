@@ -14,7 +14,7 @@ pub struct ExpenseRecord {
 
 #[derive(Debug, FromRow)]
 pub struct ExpenseTotal {
-    pub total: f64
+    pub total: f64,
 }
 
 // impl Decode for ExpenseRecord {
