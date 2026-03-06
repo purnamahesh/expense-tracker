@@ -1,13 +1,10 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use clap::{self, Args, Parser, Subcommand};
 use crate::sqlite_conn::initialize_db;
+use clap::{self, Args, Parser, Subcommand};
 
-use crate::{
-    models::ExpenseRecord,
-    path::construct_file_path,
-};
+use crate::{models::ExpenseRecord, path::construct_file_path};
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -75,18 +72,19 @@ pub struct FilterArgs {
     pub category: Option<String>,
     /// tags
     #[arg(short, long)]
-    pub tag: Option<Vec<String>>,
+    pub tag: Option<String>,
     /// amount greater than and equal to
     #[arg(long)]
-    pub ge: Option<String>,
+    pub ge: Option<f64>,
     /// amount less than and equal to
     #[arg(long)]
-    pub le: Option<String>,
+    pub le: Option<f64>,
+    /// limit fetched records
+    #[arg(short, long)]
+    pub limit: Option<i64>,
 }
 
-pub async fn parse_sub_commands(
-    args: ExpenseTrackerArgs,
-) -> Result<(), Box<dyn Error>> {
+pub async fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
     let conn = initialize_db(args.records_path).await?;
     match args.command {
         Operation::Add(add_args) => {
@@ -96,17 +94,10 @@ pub async fn parse_sub_commands(
                 add_args.category,
                 add_args.tag,
             );
-            new_expense
-                .insert_expense_record(conn)
-                .await?;
+            new_expense.insert_expense_record(conn).await?;
         }
         Operation::Filter(filter_args) => {
-            // ExpenseRecord::filter_expenses(
-            //     filter_args.category,
-            //     filter_args.tag,
-            //     filter_args.amount,
-            //     args.records_path,
-            // )?;
+            ExpenseRecord::filter_expenses(filter_args, conn).await?;
         }
         Operation::List => {
             ExpenseRecord::list_expenses(conn).await?;

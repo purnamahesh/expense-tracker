@@ -1,6 +1,4 @@
-use std::ops::Deref;
-
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::{Decode, FromRow, Type};
 
 #[derive(Debug, FromRow, Serialize, Type, Decode)]

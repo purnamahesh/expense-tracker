@@ -3,7 +3,7 @@ name = "pense"
 version = "0.7.1"
 edition = "2024"
 description = """
-expense-tracker is a cli based tool to track expenses.
+pense is a cli based tool to track expenses.
 """
 readme = "README.md"
 documentation = "https://purnamahesh.github.io/expense-tracker/"

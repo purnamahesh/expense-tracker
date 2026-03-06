@@ -1,27 +1,13 @@
 use std::error::Error;
-use std::path::PathBuf;
-use std::vec;
+// use std::vec;
 
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
+use crate::cli::FilterArgs;
 use crate::constants::TIME_FORMAT;
 use crate::models::{ExpenseRecord, ExpenseTotal};
-// use crate::path::generate_read_path;
-
-#[derive(Default)]
-pub struct ExpenseList {
-    expense_list: Vec<ExpenseRecord>,
-}
-
-impl ExpenseList {
-    pub fn new() -> Self {
-        ExpenseList {
-            expense_list: vec![],
-        }
-    }
-}
 
 impl ExpenseRecord {
     pub fn new(
@@ -34,16 +20,13 @@ impl ExpenseRecord {
             amount,
             description,
             category,
-            tags: tags,
+            tags,
             datetime: Utc::now().timestamp(),
         }
     }
 
-    pub async fn insert_expense_record(
-        &self,
-        conn: Pool<Sqlite>,
-    ) -> Result<(), sqlx::Error> {
-        let res= sqlx::query("INSERT INTO expense (id, category, amount, tags, datetime, description) values ($1, $2, $3, $4, $5, $6)")
+    pub async fn insert_expense_record(&self, conn: Pool<Sqlite>) -> Result<(), sqlx::Error> {
+        let _res= sqlx::query("INSERT INTO expense (id, category, amount, tags, datetime, description) values ($1, $2, $3, $4, $5, $6)")
             .bind(Uuid::new_v4().to_string())
             .bind(&self.category)
             .bind(&self.amount)
@@ -51,7 +34,8 @@ impl ExpenseRecord {
             .bind(Utc::now().timestamp())
             .bind(&self.description)
             .execute(&conn)
-            .await?;
+            .await?
+            .rows_affected();
 
         Ok(())
     }
@@ -82,9 +66,7 @@ impl ExpenseRecord {
         }
     }
 
-    pub async fn list_expenses(
-        conn: Pool<Sqlite>,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn list_expenses(conn: Pool<Sqlite>) -> Result<(), Box<dyn Error>> {
         let expense_list = sqlx::query_as::<_, ExpenseRecord>(
             "SELECT amount, category, datetime, tags, description FROM expense",
         )
@@ -95,9 +77,7 @@ impl ExpenseRecord {
         Ok(())
     }
 
-    pub async fn expense_total(
-        conn: Pool<Sqlite>,
-    ) -> Result<f64, Box<dyn Error>> {
+    pub async fn expense_total(conn: Pool<Sqlite>) -> Result<f64, Box<dyn Error>> {
         let expense_total =
             sqlx::query_as::<_, ExpenseTotal>("SELECT sum(amount) total FROM expense")
                 .fetch_one(&conn)
@@ -106,48 +86,35 @@ impl ExpenseRecord {
         Ok(expense_total.total)
     }
 
-    pub fn filter_expenses(
-        category: Option<String>,
-        tags: Option<Vec<String>>,
-        amount: Option<f64>,
+    pub async fn filter_expenses(
+        filter_args: FilterArgs,
+        conn: Pool<Sqlite>,
     ) -> Result<(), Box<dyn Error>> {
-        // let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
+        let query = String::from(
+            r#"
+                SELECT amount, category, datetime, tags, description 
+                FROM expense 
+                WHERE ($1 is NULL OR amount = $1)
+                AND ($2 is NULL OR category = $2)
+                AND ($3 is NULL OR tags LIKE '%$3%')
+                AND ($4 is NULL OR amount >= $4)
+                AND ($5 is NULL OR amount <= $5)
+                LIMIT $6
+            "#,
+        );
 
-        // let filtered_list = expense_list
-        //     .expense_list
-        //     .iter()
-        //     .filter(|exp: &&ExpenseRecord| {
-        //         let amount_flag = if let Some(amount) = amount {
-        //             amount == exp.amount
-        //         } else {
-        //             true
-        //         };
+        let expense_list = sqlx::query_as::<_, ExpenseRecord>(&query)
+            .bind(&filter_args.amount)
+            .bind(&filter_args.category)
+            .bind(&filter_args.tag)
+            .bind(&filter_args.ge)
+            .bind(&filter_args.le)
+            .bind(&filter_args.limit.unwrap_or(-1))
+            .fetch_all(&conn)
+            .await?;
 
-        //         let category_flag = if let Some(category) = &category {
-        //             category.as_str() == exp.category.as_str()
-        //         } else {
-        //             true
-        //         };
+        Self::display_expenses(&expense_list);
 
-        //         let tags_flag = if let Some(tags) = &tags {
-        //             let mut flag = false;
-        //             if exp.tags.is_empty() {
-        //                 flag = false
-        //             } else {
-        //                 for tag in tags {
-        //                     flag = exp.tags.contains(tag);
-        //                 }
-        //             }
-        //             flag
-        //         } else {
-        //             true
-        //         };
-
-        //         amount_flag && category_flag && tags_flag
-        //     });
-        // let x = filtered_list.collect::<Vec<_>>();
-
-        // Self::display_expenses(x);
         Ok(())
     }
 }
