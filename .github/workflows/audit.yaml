@@ -1,0 +1,16 @@
+name: Command Dispatch
+on:
+  issue_comment:
+    types: [created]
+
+# permissions:
+#   contents: write       # Trigger workflows on PR branch
+#   actions: write        # Dispatch workflows
+#   pull-requests: write  # Comment on PRs and react to comments
+#   id-token: write       # OIDC for Artifactory (if workflows need it)
+#   packages: write       # Docker operations (if building images)
+
+jobs:
+  dispatch:
+    uses: purnamahesh/.github/workflows/audit.yaml@feature/rust-ci
+    secrets: inherit
