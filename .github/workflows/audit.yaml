@@ -1,7 +1,9 @@
 name: Command Dispatch
 on:
-  issue_comment:
-    types: [created]
+  pull_request:
+    branches:
+      - main
+      - master
 
 # permissions:
 #   contents: write       # Trigger workflows on PR branch
