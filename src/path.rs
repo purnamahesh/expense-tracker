@@ -12,12 +12,12 @@ pub fn get_project_db_file_path() -> Result<String, Box<dyn Error>> {
     if let Some(p) = ProjectDirs::from("", "", "pense") {
         // self.config_dir = Some(p.config_dir().to_path_buf());
         let data_dir = p.data_dir().to_path_buf();
-        
+
         let path = match data_dir.to_str() {
             Some(path_str) => {
                 create_project_dir_if_not_exists(path_str)?;
                 path_str
-            },
+            }
             None => {
                 eprintln!("utf-8: Failed to get data dir");
                 exit(1);
@@ -30,13 +30,19 @@ pub fn get_project_db_file_path() -> Result<String, Box<dyn Error>> {
     }
 }
 
-pub fn validate_file_path(path: &PathBuf) -> Result<(), &'static str> {
-    if !path.exists() {
-        return Err("File not found!");
-    } else if !path.is_file() {
-        return Err("Not a file");
-    }
+pub fn validate_file_path(path: &Path) -> Result<(), &'static str> {
 
+    if path.is_dir() {
+        return Err("directory path is provided instead of a file path; eg: ../filename.db");
+    }
+    if let Some(path_str) = path.to_str() {
+        if ! path_str.ends_with(".db") {
+            return Err("Not a db file; Should be <some relative or absolute path>/some_filename.db");
+        }
+    } else {
+        return Err("Non utf-8 characters found in path");
+    }
+    
     Ok(())
 }
 
@@ -54,7 +60,7 @@ pub fn construct_file_path(path: &str) -> Result<PathBuf, &'static str> {
             if let Some(base_dirs) = directories::BaseDirs::new() {
                 let mut hdir = base_dirs.home_dir().to_path_buf();
                 hdir.push(path_from_home_dir);
-                hdir
+                return Ok(hdir);
             } else {
                 return Err("Unable to fetch homedir");
             }
@@ -89,23 +95,6 @@ pub fn create_project_dir_if_not_exists(dir_name: &str) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-// pub fn generate_read_path(file_path: Option<PathBuf>) -> Result<PathBuf, Box<dyn Error + 'static>> {
-//     validate_project_dir(project_dir)?;
-//     let p_dir = project_dir.as_ref().unwrap();
-//     let path = file_path.unwrap_or(p_dir.join(FILE_NAME));
-//     Ok(path)
-// }
-
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-
-//     #[test]
-//     #[should_panic(expected="No records yet at ")]
-//     fn test_load_expenses_from_psv() {
-//         let _ = read_file_content(Some("./expense_db.csv"));
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -114,38 +103,25 @@ mod tests {
 
     use super::*;
 
-    // #[should_panic]
-    #[fixture]
-    fn home_path() -> String {
-        #[cfg(target_os = "windows")]
-        let path = env::var("USERPROFILE").unwrap();
-
-        #[cfg(target_os = "linux")]
-        let path = env::var("HOME").unwrap();
-
-        #[cfg(target_os = "macos")]
-        let path = env::var("HOME").unwrap();
-
-        path
-    }
 
     #[fixture]
     fn current_file_name() -> PathBuf {
-        let arrgs: Vec<String> = env::args().collect();
-        PathBuf::from(arrgs[0].to_owned())
+        let args: Vec<String> = env::args().collect();
+        PathBuf::from(args[0].to_owned())
     }
 
     #[rstest]
-    fn test_construct_file_path(home_path: String) {
-        println!("{:?}", construct_file_path("filename.psv"));
-        assert_eq!(
-            construct_file_path("README.md"),
-            Ok(PathBuf::from("README.md"))
-        );
+    fn test_construct_file_path() {
+        // println!("{:?}", construct_file_path("filename.psv"));
 
+        assert!(
+            construct_file_path("README.md")
+            .is_err()
+        );
+        
         assert_eq!(
-            construct_file_path("./README.md"),
-            Ok(PathBuf::from("./README.md"))
+            construct_file_path("./temp.db"),
+            Ok(PathBuf::from("./temp.db"))
         );
 
         // assert_eq!(
@@ -157,7 +133,14 @@ mod tests {
     // Testing validate_file_pat
     #[rstest]
     fn test_validate_file_path_valid(current_file_name: PathBuf) {
-        assert!(validate_file_path(&current_file_name).is_ok());
+        assert!(validate_file_path(
+                &current_file_name
+                    .as_path()
+                    .parent()
+                    .unwrap()
+                    .join("temp.db")
+                    .to_path_buf()
+            ).is_ok());
     }
 
     #[rstest]

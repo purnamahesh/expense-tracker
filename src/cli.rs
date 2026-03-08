@@ -56,7 +56,7 @@ pub struct AddArgs {
     /// Description
     #[arg(short, long)]
     pub description: Option<String>,
-    /// tags
+    /// comma seperated tags eg: tag1,tag2
     #[arg(short, long)]
     pub tag: Option<String>,
 }
@@ -85,7 +85,15 @@ pub struct FilterArgs {
 }
 
 pub async fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
-    let conn = initialize_db(args.records_path).await?;
+    let conn = initialize_db(
+        args.records_path,
+        matches!(&args.command, Operation::Add(_))
+        // match &args.command {
+        //     Operation::Add(_) => true,
+        //     _ => false,
+        // },
+    )
+    .await?;
     match args.command {
         Operation::Add(add_args) => {
             let new_expense = ExpenseRecord::new(

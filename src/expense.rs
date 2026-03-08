@@ -29,7 +29,7 @@ impl ExpenseRecord {
         let _res= sqlx::query("INSERT INTO expense (id, category, amount, tags, datetime, description) values ($1, $2, $3, $4, $5, $6)")
             .bind(Uuid::new_v4().to_string())
             .bind(&self.category)
-            .bind(&self.amount)
+            .bind(self.amount)
             .bind(&self.tags)
             .bind(Utc::now().timestamp())
             .bind(&self.description)
@@ -40,7 +40,7 @@ impl ExpenseRecord {
         Ok(())
     }
 
-    pub fn display_expenses(expense_list: &Vec<ExpenseRecord>) {
+    pub fn display_expenses(expense_list: &[ExpenseRecord]) {
         println!(
             "{:<30}{:<20}{:<10}{:<50}{:<10}",
             "Time", "Category", "Amount", "Description", "Tags"
@@ -104,12 +104,12 @@ impl ExpenseRecord {
         );
 
         let expense_list = sqlx::query_as::<_, ExpenseRecord>(&query)
-            .bind(&filter_args.amount)
+            .bind(filter_args.amount)
             .bind(&filter_args.category)
             .bind(&filter_args.tag)
-            .bind(&filter_args.ge)
-            .bind(&filter_args.le)
-            .bind(&filter_args.limit.unwrap_or(-1))
+            .bind(filter_args.ge)
+            .bind(filter_args.le)
+            .bind(filter_args.limit.unwrap_or(-1))
             .fetch_all(&conn)
             .await?;
 
