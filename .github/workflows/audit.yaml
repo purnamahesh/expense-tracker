@@ -6,6 +6,7 @@ on:
       - main
       - feat/sqlite-db
 
+      
 # permissions:
 #   contents: write       # Trigger workflows on PR branch
 #   actions: write        # Dispatch workflows
