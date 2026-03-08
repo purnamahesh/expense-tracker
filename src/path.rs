@@ -31,18 +31,19 @@ pub fn get_project_db_file_path() -> Result<String, Box<dyn Error>> {
 }
 
 pub fn validate_file_path(path: &Path) -> Result<(), &'static str> {
-
     if path.is_dir() {
         return Err("directory path is provided instead of a file path; eg: ../filename.db");
     }
     if let Some(path_str) = path.to_str() {
-        if ! path_str.ends_with(".db") {
-            return Err("Not a db file; Should be <some relative or absolute path>/some_filename.db");
+        if !path_str.ends_with(".db") {
+            return Err(
+                "Not a db file; Should be <some relative or absolute path>/some_filename.db",
+            );
         }
     } else {
         return Err("Non utf-8 characters found in path");
     }
-    
+
     Ok(())
 }
 
@@ -95,14 +96,12 @@ pub fn create_project_dir_if_not_exists(dir_name: &str) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
     use std::env;
 
     use super::*;
-
 
     #[fixture]
     fn current_file_name() -> PathBuf {
@@ -112,13 +111,8 @@ mod tests {
 
     #[rstest]
     fn test_construct_file_path() {
-        // println!("{:?}", construct_file_path("filename.psv"));
+        assert!(construct_file_path("README.md").is_err());
 
-        assert!(
-            construct_file_path("README.md")
-            .is_err()
-        );
-        
         assert_eq!(
             construct_file_path("./temp.db"),
             Ok(PathBuf::from("./temp.db"))
@@ -126,21 +120,24 @@ mod tests {
 
         // assert_eq!(
         //     construct_file_path("~/filename.psv"),
-        //     Ok(PathBuf::from(home_path).join("filename.psv"))
+        //     Ok(PathBuf::from(home_path))
         // );
     }
 
     // Testing validate_file_pat
     #[rstest]
     fn test_validate_file_path_valid(current_file_name: PathBuf) {
-        assert!(validate_file_path(
+        assert!(
+            validate_file_path(
                 &current_file_name
                     .as_path()
                     .parent()
                     .unwrap()
                     .join("temp.db")
                     .to_path_buf()
-            ).is_ok());
+            )
+            .is_ok()
+        );
     }
 
     #[rstest]

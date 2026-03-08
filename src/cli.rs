@@ -18,8 +18,6 @@ pub struct ExpenseTrackerArgs {
     /// User profile
     #[arg(short, long)]
     pub user: Option<String>,
-    // data_dir: Option<PathBuf>,
-    // config_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -87,11 +85,7 @@ pub struct FilterArgs {
 pub async fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
     let conn = initialize_db(
         args.records_path,
-        matches!(&args.command, Operation::Add(_))
-        // match &args.command {
-        //     Operation::Add(_) => true,
-        //     _ => false,
-        // },
+        matches!(&args.command, Operation::Add(_)),
     )
     .await?;
     match args.command {
