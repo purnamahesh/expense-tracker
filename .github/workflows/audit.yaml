@@ -13,6 +13,7 @@ on:
 #   id-token: write       # OIDC for Artifactory (if workflows need it)
 #   packages: write       # Docker operations (if building images)
 
+
 jobs:
   dispatch:
     uses: purnamahesh/reusable-workflows/.github/workflows/rust-audit.yaml@feature/rust-ci
