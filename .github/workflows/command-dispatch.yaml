@@ -1,0 +1,16 @@
+name: Command Dispatch
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+  packages: write
+  id-token: write
+
+jobs:
+  dispatch:
+    uses: purnamahesh/reusable-workflows/.github/workflows/command-dispatch.yaml@feature/rust-ci
+    secrets: inherit

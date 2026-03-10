@@ -1,0 +1,22 @@
+name: Test
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+
+# permissions:
+#   contents: write       # Trigger workflows on PR branch
+#   actions: write        # Dispatch workflows
+#   pull-requests: write  # Comment on PRs and react to comments
+#   id-token: write       # OIDC for Artifactory (if workflows need it)
+#   packages: write       # Docker operations (if building images)
+
+jobs:
+  test:
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-test.yaml@feature/rust-ci
+    secrets: inherit
+    with:
+      os: '["ubuntu-latest", "macos-latest"]'
+      toolchain: '["stable"]'
+      features: '["full", "lite"]'
+      no-default-features: true

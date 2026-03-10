@@ -1,0 +1,9 @@
+name: Bump
+on:
+  workflow_dispatch:
+
+jobs:
+  bump:
+    uses: purnamahesh/reusable-workflows/.github/workflows/bump.yaml@feature/rust-ci
+    secrets:
+      PAT: ${{ secrets.PAT }}
