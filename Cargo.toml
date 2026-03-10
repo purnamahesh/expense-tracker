@@ -29,11 +29,11 @@ autotests = false
 rust-version = "1.91.0"
 
 [dependencies]
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.42"}
 clap = { version = "4.5.51", features = ["derive"] }
 directories = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
-sqlx = { version = "0.8.6", features = ["macros", "derive", "runtime-tokio", "chrono"] }
+sqlx = { version = "0.8.6", features = ["macros", "derive", "runtime-tokio"] }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
 uuid = { version = "1.21.0", features = ["v4"] }
 
