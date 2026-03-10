@@ -17,6 +17,6 @@ jobs:
     uses: purnamahesh/reusable-workflows/.github/workflows/rust-test.yaml@feature/rust-ci
     secrets: inherit
     with:
-      os: '["ubuntu-latest"]'
+      os: '["ubuntu-latest", "macos-latest"]'
       toolchain: '["stable"]'
       features: '["full", "lite"]'
