@@ -42,6 +42,10 @@ pense -p ./my-expenses.db list
 pense --help
 ```
 
+
+### Previous versions
+Explore older versions of pense here: [expense-tracker](https://crates.io/crates/expense-tracker)
+
 ## License
 
 MIT

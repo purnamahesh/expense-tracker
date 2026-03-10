@@ -158,7 +158,7 @@ mod tests {
     #[rstest]
     fn test_validate_file_path_invalid_dir(current_file_name: PathBuf) {
         assert!(
-            validate_file_path(&current_file_name.as_path().parent().unwrap().to_path_buf())
+            validate_file_path(current_file_name.as_path().parent().unwrap())
                 .is_err()
         );
     }
