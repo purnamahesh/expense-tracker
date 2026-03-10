@@ -12,7 +12,7 @@ on:
 #   packages: write       # Docker operations (if building images)
 
 jobs:
-  dispatch:
+  test:
     uses: purnamahesh/reusable-workflows/.github/workflows/rust-test.yaml@feature/rust-ci
     secrets: inherit
     with:
