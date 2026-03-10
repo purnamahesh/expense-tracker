@@ -5,7 +5,7 @@ on:
 
 jobs:
   release:
-    uses: purnamahesh/reusable-workflows/.github/workflows/rust-release.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-release.yaml@main
     with:
       publish-crate: true
     secrets:

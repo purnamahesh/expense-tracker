@@ -14,5 +14,5 @@ on:
 
 jobs:
   dispatch:
-    uses: purnamahesh/reusable-workflows/.github/workflows/rust-audit.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-audit.yaml@main
     secrets: inherit

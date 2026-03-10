@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    uses: purnamahesh/reusable-workflows/.github/workflows/rust-test.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-test.yaml@main
     secrets: inherit
     with:
       os: '["ubuntu-latest", "macos-latest"]'

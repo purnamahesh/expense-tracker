@@ -12,5 +12,5 @@ permissions:
 
 jobs:
   dispatch:
-    uses: purnamahesh/reusable-workflows/.github/workflows/command-dispatch.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/command-dispatch.yaml@main
     secrets: inherit

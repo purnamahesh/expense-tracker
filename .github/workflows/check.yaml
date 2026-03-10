@@ -6,7 +6,7 @@ on:
 
 jobs:
   check:
-    uses: purnamahesh/reusable-workflows/.github/workflows/rust-check.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-check.yaml@main
     secrets: inherit
     with:
       features: '["full", "lite"]'

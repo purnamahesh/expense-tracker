@@ -4,6 +4,6 @@ on:
 
 jobs:
   bump:
-    uses: purnamahesh/reusable-workflows/.github/workflows/bump.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/bump.yaml@main
     secrets:
       PAT: ${{ secrets.PAT }}

@@ -7,7 +7,7 @@ on:
 
 jobs:
   pre-release:
-    uses: purnamahesh/reusable-workflows/.github/workflows/rust-pre-release.yaml@feature/rust-ci
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-pre-release.yaml@main
     with:
       pre-release-label: ${{ inputs.pre-release-label }}
     secrets:
