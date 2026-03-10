@@ -1,14 +1,16 @@
+#[cfg(all(feature = "full", feature = "lite"))]
+compile_error!("Features `full` and `lite` are mutually exclusive. Please enable only one.");
+
 use clap::Parser;
 use std::error::Error;
 
-use expense_tracker::cli;
+use pense::cli;
 
-fn main() -> Result<(), Box<dyn Error + 'static>> {
-    let mut args = cli::ExpenseTrackerArgs::parse();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error + 'static>> {
+    let args = cli::ExpenseTrackerArgs::parse();
 
-    args.set_dirs()?;
-
-    cli::parse_sub_commands(args)?;
+    cli::parse_sub_commands(args).await?;
 
     Ok(())
 }

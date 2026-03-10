@@ -1,0 +1,13 @@
+name: Check
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+
+jobs:
+  check:
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-check.yaml@main
+    secrets: inherit
+    with:
+      features: '["full", "lite"]'
+      no-default-features: true

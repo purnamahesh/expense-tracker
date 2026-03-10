@@ -1,9 +1,9 @@
 [package]
-name = "expense-tracker"
-version = "0.7.1"
+name = "pense"
+version = "0.9.0"
 edition = "2024"
 description = """
-expense-tracker is a cli based tool to track expenses.
+pense is a cli based tool to track expenses.
 """
 readme = "README.md"
 documentation = "https://purnamahesh.github.io/expense-tracker/"
@@ -29,9 +29,24 @@ autotests = false
 rust-version = "1.91.0"
 
 [dependencies]
-chrono = "0.4.42"
+chrono = { version = "0.4.42"}
 clap = { version = "4.5.51", features = ["derive"] }
 directories = "6.0.0"
+serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["macros", "derive", "runtime-tokio"] }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+uuid = { version = "1.21.0", features = ["v4"] }
+
+[features]
+default = ["full"]
+
+full = [
+  "sqlx/sqlite"
+]
+
+lite = [
+  "sqlx/sqlite-unbundled"
+]
 
 [dev-dependencies]
 rstest = "0.26.1"

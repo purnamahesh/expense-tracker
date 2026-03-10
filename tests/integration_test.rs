@@ -14,8 +14,8 @@ fn mock_expenses_file_path() -> String {
 
 #[rstest]
 fn test_invalid_records_path_file() {
-    Command::new(cargo::cargo_bin!("expense-tracker"))
-        .arg("-p=mock_expenses.psv")
+    Command::new(cargo::cargo_bin!("pense"))
+        .arg("-p=./tests/pense.txt")
         .arg("list")
         .assert()
         .failure();
@@ -23,7 +23,7 @@ fn test_invalid_records_path_file() {
 
 #[rstest]
 fn test_invalid_records_path_dir() {
-    Command::new(cargo::cargo_bin!("expense-tracker"))
+    Command::new(cargo::cargo_bin!("pense"))
         .arg("-p=tests/")
         .arg("list")
         .assert()
@@ -32,9 +32,9 @@ fn test_invalid_records_path_dir() {
 
 #[rstest]
 fn test_list(mock_expenses_file_path: String) {
-    Command::new(cargo::cargo_bin!("expense-tracker"))
+    Command::new(cargo::cargo_bin!("pense"))
         .arg(format!(
-            "-p={}tests/resources/mock_expenses.psv",
+            "-p={}tests/resources/pense.db",
             mock_expenses_file_path
         ))
         .arg("list")
@@ -44,12 +44,12 @@ fn test_list(mock_expenses_file_path: String) {
 
 #[rstest]
 fn test_total(mock_expenses_file_path: String) {
-    Command::new(cargo::cargo_bin!("expense-tracker"))
+    Command::new(cargo::cargo_bin!("pense"))
         .arg(format!(
-            "-p={}tests/resources/mock_expenses.psv",
+            "-p={}tests/resources/pense.db",
             mock_expenses_file_path
         ))
         .arg("total")
         .assert()
-        .stdout("Total: 1044\n");
+        .stdout("Total: 594\n");
 }

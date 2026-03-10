@@ -1,0 +1,9 @@
+name: Audit
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  dispatch:
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-audit.yaml@main
+    secrets: inherit

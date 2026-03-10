@@ -1,0 +1,13 @@
+name: Release
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    uses: purnamahesh/reusable-workflows/.github/workflows/rust-release.yaml@main
+    with:
+      publish-crate: true
+    secrets:
+      PAT: ${{ secrets.PAT }}
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

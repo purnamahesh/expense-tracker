@@ -1,11 +1,10 @@
 use std::error::Error;
 use std::path::PathBuf;
 
+use crate::sqlite_conn::initialize_db;
 use clap::{self, Args, Parser, Subcommand};
-use directories::ProjectDirs;
 
-use crate::expense::Expense;
-use crate::path::{construct_file_path, validate_file_path};
+use crate::{models::ExpenseRecord, path::construct_file_path};
 
 #[derive(Parser, Debug)]
 // #[clap(author, version, about)]
@@ -13,27 +12,12 @@ use crate::path::{construct_file_path, validate_file_path};
 pub struct ExpenseTrackerArgs {
     #[clap(subcommand)]
     pub command: Operation,
-    /// Custom path to psv file where records should be saved.
+    /// Custom path to sqlitedb file where records should be saved.
     #[arg(short='p', long, value_parser = construct_file_path)]
     pub records_path: Option<PathBuf>,
     /// User profile
     #[arg(short, long)]
     pub user: Option<String>,
-    data_dir: Option<PathBuf>,
-    config_dir: Option<PathBuf>,
-}
-
-impl ExpenseTrackerArgs {
-    pub fn set_dirs(&mut self) -> Result<(), &'static str> {
-        if let Some(p) = ProjectDirs::from("", "", "expense-tracker") {
-            self.config_dir = Some(p.config_dir().to_path_buf());
-            self.data_dir = Some(p.data_dir().to_path_buf());
-        } else {
-            return Err("No valid home directory path detected!");
-        };
-
-        Ok(())
-    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -70,15 +54,15 @@ pub struct AddArgs {
     /// Description
     #[arg(short, long)]
     pub description: Option<String>,
-    /// tags
+    /// comma seperated tags eg: tag1,tag2
     #[arg(short, long)]
-    pub tag: Option<Vec<String>>,
+    pub tag: Option<String>,
 }
 
 #[derive(Args, Debug)]
 #[group(required = true)]
 pub struct FilterArgs {
-    /// expense amount
+    /// amount equals
     #[arg(short, long)]
     pub amount: Option<f64>,
     /// expense category
@@ -86,37 +70,42 @@ pub struct FilterArgs {
     pub category: Option<String>,
     /// tags
     #[arg(short, long)]
-    pub tag: Option<Vec<String>>,
+    pub tag: Option<String>,
+    /// amount greater than and equal to
+    #[arg(long)]
+    pub ge: Option<f64>,
+    /// amount less than and equal to
+    #[arg(long)]
+    pub le: Option<f64>,
+    /// limit fetched records
+    #[arg(short, long)]
+    pub limit: Option<i64>,
 }
 
-pub fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
+pub async fn parse_sub_commands(args: ExpenseTrackerArgs) -> Result<(), Box<dyn Error>> {
+    let conn = initialize_db(
+        args.records_path,
+        matches!(&args.command, Operation::Add(_)),
+    )
+    .await?;
     match args.command {
         Operation::Add(add_args) => {
-            let new_expense = Expense::new(
+            let new_expense = ExpenseRecord::new(
                 add_args.amount,
                 add_args.description,
                 add_args.category,
                 add_args.tag,
             );
-            new_expense.write_expense_to_psv(args.records_path, &args.data_dir)?;
+            new_expense.insert_expense_record(conn).await?;
         }
         Operation::Filter(filter_args) => {
-            validate_file_path(&args.records_path)?;
-            Expense::filter_expenses(
-                filter_args.category,
-                filter_args.tag,
-                filter_args.amount,
-                args.records_path,
-                &args.data_dir,
-            )?;
+            ExpenseRecord::filter_expenses(filter_args, conn).await?;
         }
         Operation::List => {
-            validate_file_path(&args.records_path)?;
-            Expense::list_expenses(args.records_path, &args.data_dir)?;
+            ExpenseRecord::list_expenses(conn).await?;
         }
         Operation::Total => {
-            validate_file_path(&args.records_path)?;
-            let total = Expense::expense_total(args.records_path, &args.data_dir)?;
+            let total = ExpenseRecord::expense_total(conn).await?;
             println!("Total: {}", total);
         }
     }

@@ -1,103 +1,46 @@
 use std::error::Error;
-use std::fs::OpenOptions;
-use std::path::PathBuf;
-use std::{io::Write, vec};
+// use std::vec;
 
 use chrono::{DateTime, Utc};
+use sqlx::{Pool, Sqlite};
+use uuid::Uuid;
 
-use crate::config::TIME_FORMAT;
-use crate::path::{generate_read_path, read_file_content};
+use crate::cli::FilterArgs;
+use crate::constants::TIME_FORMAT;
+use crate::models::{ExpenseRecord, ExpenseTotal};
 
-pub struct Expense {
-    amount: f64,
-    category: String,
-    tags: Vec<String>,
-    datetime: DateTime<Utc>,
-    description: Option<String>,
-}
-
-#[derive(Default)]
-pub struct ExpenseList {
-    expense_list: Vec<Expense>,
-}
-
-impl ExpenseList {
-    pub fn new() -> Self {
-        ExpenseList {
-            expense_list: vec![],
-        }
-    }
-
-    pub fn load_expenses_from_psv(
-        &mut self,
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
-    ) -> Result<(), Box<dyn Error>> {
-        let content: String = read_file_content(file_path, project_dir)?;
-        for line in content.trim().split('\n') {
-            let fields: Vec<&str> = line.trim().split('|').collect();
-            self.expense_list.push(Expense {
-                amount: fields[2].trim().parse::<f64>()?,
-                description: Some(fields[3][1..fields[3].len() - 1].to_owned()),
-                category: fields[1].to_owned(),
-                tags: fields[4][1..fields[4].len() - 1]
-                    .trim()
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect(),
-                datetime: DateTime::parse_from_str(fields[0], TIME_FORMAT)?.to_utc(),
-            });
-        }
-
-        Ok(())
-    }
-}
-
-impl Expense {
+impl ExpenseRecord {
     pub fn new(
         amount: f64,
         description: Option<String>,
         category: String,
-        tags: Option<Vec<String>>,
-    ) -> Expense {
-        Expense {
+        tags: Option<String>,
+    ) -> ExpenseRecord {
+        ExpenseRecord {
             amount,
             description,
             category,
-            tags: tags.unwrap_or_default(),
-            datetime: Utc::now(),
+            tags,
+            datetime: Utc::now().timestamp(),
         }
     }
 
-    pub fn write_expense_to_psv(
-        &self,
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
-    ) -> Result<(), Box<dyn Error>> {
-        let record = self.to_psv_record();
-        let content = record.as_bytes();
-
-        let path = generate_read_path(file_path, project_dir)?;
-
-        let mut file = OpenOptions::new().append(true).create(true).open(path)?;
-
-        file.write_all(content)?;
+    pub async fn insert_expense_record(&self, conn: Pool<Sqlite>) -> Result<(), sqlx::Error> {
+        let _res= sqlx::query("INSERT INTO expense (id, category, amount, tags, datetime, description) values ($1, $2, $3, $4, $5, $6)")
+            .bind(Uuid::new_v4().to_string())
+            .bind(&self.category)
+            .bind(self.amount)
+            .bind(&self.tags)
+            .bind(Utc::now().timestamp())
+            .bind(&self.description)
+            .execute(&conn)
+            .await?
+            .rows_affected();
 
         Ok(())
     }
 
-    pub fn to_psv_record(&self) -> String {
-        format!(
-            "{}|{}|{}|\"{}\"|\"{}\"\n",
-            self.datetime.format(TIME_FORMAT),
-            self.category.as_str().to_lowercase(),
-            self.amount,
-            self.description.as_ref().unwrap_or(&"".to_string()),
-            self.tags.join(",").to_lowercase()
-        )
-    }
-
-    pub fn display_expenses(expense_list: Vec<&Expense>) {
+    pub fn display_expenses(expense_list: &[ExpenseRecord]) {
         println!(
             "{:<30}{:<20}{:<10}{:<50}{:<10}",
             "Time", "Category", "Amount", "Description", "Tags"
@@ -106,144 +49,116 @@ impl Expense {
         for expense in expense_list.iter() {
             println!(
                 "{:<30}{:<20}{:<10}{:<50}{:?}",
-                expense.datetime.format(TIME_FORMAT).to_string(),
-                expense.category,
-                expense.amount,
-                expense
+                DateTime::from_timestamp_secs(expense.datetime)
+                    .unwrap()
+                    .format(TIME_FORMAT)
+                    .to_string(),
+                // expense.datetime.format(TIME_FORMAT).to_string(),
+                &expense.category,
+                &expense.amount,
+                &expense
                     .description
                     .as_ref()
                     .unwrap_or(&"".to_string())
                     .as_str(),
-                expense.tags
+                &expense.tags
             );
         }
     }
 
-    pub fn list_expenses(
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
-    ) -> Result<(), Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
-        let x = Vec::from_iter(expense_list.expense_list.iter());
+    pub async fn list_expenses(conn: Pool<Sqlite>) -> Result<(), Box<dyn Error>> {
+        let expense_list = sqlx::query_as::<_, ExpenseRecord>(
+            "SELECT amount, category, datetime, tags, description FROM expense",
+        )
+        .fetch_all(&conn)
+        .await?;
 
-        Self::display_expenses(x);
+        Self::display_expenses(&expense_list);
         Ok(())
     }
 
-    pub fn expense_total(
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
-    ) -> Result<f64, Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
+    pub async fn expense_total(conn: Pool<Sqlite>) -> Result<f64, Box<dyn Error>> {
+        let expense_total =
+            sqlx::query_as::<_, ExpenseTotal>("SELECT sum(amount) total FROM expense")
+                .fetch_one(&conn)
+                .await?;
 
-        let mut total: f64 = 0.0;
-
-        for expense in expense_list.expense_list {
-            total += expense.amount;
-        }
-
-        Ok(total)
+        Ok(expense_total.total)
     }
 
-    fn get_expense_list_from_psv(
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
-    ) -> Result<ExpenseList, Box<dyn Error>> {
-        let mut expense_list = ExpenseList::new();
-
-        expense_list.load_expenses_from_psv(file_path, project_dir)?;
-
-        Ok(expense_list)
-    }
-
-    pub fn filter_expenses(
-        category: Option<String>,
-        tags: Option<Vec<String>>,
-        amount: Option<f64>,
-        file_path: Option<PathBuf>,
-        project_dir: &Option<PathBuf>,
+    pub async fn filter_expenses(
+        filter_args: FilterArgs,
+        conn: Pool<Sqlite>,
     ) -> Result<(), Box<dyn Error>> {
-        let expense_list = Self::get_expense_list_from_psv(file_path, project_dir)?;
+        let query = String::from(
+            r#"
+                SELECT amount, category, datetime, tags, description 
+                FROM expense 
+                WHERE ($1 is NULL OR amount = $1)
+                AND ($2 is NULL OR category = $2)
+                AND ($3 is NULL OR tags LIKE '%$3%')
+                AND ($4 is NULL OR amount >= $4)
+                AND ($5 is NULL OR amount <= $5)
+                LIMIT $6
+            "#,
+        );
 
-        let filtered_list = expense_list.expense_list.iter().filter(|exp: &&Expense| {
-            let amount_flag = if let Some(amount) = amount {
-                amount == exp.amount
-            } else {
-                true
-            };
+        let expense_list = sqlx::query_as::<_, ExpenseRecord>(&query)
+            .bind(filter_args.amount)
+            .bind(&filter_args.category)
+            .bind(&filter_args.tag)
+            .bind(filter_args.ge)
+            .bind(filter_args.le)
+            .bind(filter_args.limit.unwrap_or(-1))
+            .fetch_all(&conn)
+            .await?;
 
-            let category_flag = if let Some(category) = &category {
-                category.as_str() == exp.category.as_str()
-            } else {
-                true
-            };
+        Self::display_expenses(&expense_list);
 
-            let tags_flag = if let Some(tags) = &tags {
-                let mut flag = false;
-                if exp.tags.is_empty() {
-                    flag = false
-                } else {
-                    for tag in tags {
-                        flag = exp.tags.contains(tag);
-                    }
-                }
-                flag
-            } else {
-                true
-            };
-
-            amount_flag && category_flag && tags_flag
-        });
-        let x = filtered_list.collect::<Vec<_>>();
-
-        Self::display_expenses(x);
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
+// #[cfg(test)]
+// mod tests {
 
-    use directories::ProjectDirs;
-    use rstest::{fixture, rstest};
+//     use directories::ProjectDirs;
+//     use rstest::{fixture, rstest};
 
-    use super::*;
+//     use super::*;
 
-    const MOCK_EXPENSE_PATH: &str = "tests/resources/mock_expenses.psv";
+//     const MOCK_EXPENSE_PATH: &str = "tests/resources/mock_expenses.psv";
 
-    #[fixture]
-    fn mock_expenses_path() -> PathBuf {
-        PathBuf::from(MOCK_EXPENSE_PATH)
-    }
+//     #[fixture]
+//     fn mock_expenses_path() -> PathBuf {
+//         PathBuf::from(MOCK_EXPENSE_PATH)
+//     }
 
-    #[fixture]
-    fn project_dir() -> PathBuf {
-        let p_dir = ProjectDirs::from("", "", "expense-tracker");
-        p_dir.unwrap().data_dir().to_path_buf()
-    }
+//     #[fixture]
+//     fn project_dir() -> PathBuf {
+//         let p_dir = ProjectDirs::from("", "", "expense-tracker");
+//         p_dir.unwrap().data_dir().to_path_buf()
+//     }
 
-    #[fixture]
-    fn mock_expenses_list(mock_expenses_path: PathBuf, project_dir: PathBuf) -> ExpenseList {
-        let mut mock_expenses_list = ExpenseList::new();
-        mock_expenses_list
-            .load_expenses_from_psv(Some(mock_expenses_path), &Some(project_dir))
-            .unwrap_or_else(|err| {
-                eprintln!("Failed to parse amount : {}", err);
-            });
+//     #[fixture]
+//     fn mock_expenses_list(mock_expenses_path: PathBuf, project_dir: PathBuf) -> ExpenseList {
+//         let mut mock_expenses_list = ExpenseList::new();
+//         mock_expenses_list
+//             .load_expenses_from_psv(Some(mock_expenses_path), &Some(project_dir))
+//             .unwrap_or_else(|err| {
+//                 eprintln!("Failed to parse amount : {}", err);
+//             });
 
-        mock_expenses_list
-    }
+//         mock_expenses_list
+//     }
 
-    // #[rstest]
-    // fn test_filter_expense(mock_expenses_list: ExpenseList) {}
+//     // #[rstest]
+//     // fn test_filter_expense(mock_expenses_list: ExpenseList) {}
 
-    #[rstest]
-    fn test_expense_total(
-        mock_expenses_path: PathBuf,
-        project_dir: PathBuf,
-    ) -> Result<(), Box<dyn Error>> {
-        let total = Expense::expense_total(Some(mock_expenses_path), &Some(project_dir))?;
-        assert_eq!(total, 1044.0);
-        Ok(())
-    }
-}
+//     #[rstest]
+//     fn test_expense_total(mock_expenses_path: PathBuf) -> Result<(), Box<dyn Error>> {
+//         let total = ExpenseRecord::expense_total(Some(mock_expenses_path))?;
+//         assert_eq!(total, 1044.0);
+//         Ok(())
+//     }
+// }
