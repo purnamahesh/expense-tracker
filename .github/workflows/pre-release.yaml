@@ -10,6 +10,6 @@ jobs:
     uses: purnamahesh/reusable-workflows/.github/workflows/rust-pre-release.yaml@feature/rust-ci
     with:
       pre-release-label: ${{ inputs.pre-release-label }}
-    secrets:
-      PAT: ${{ secrets.PAT }}
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    secrets: inherit
+      # PAT: ${{ secrets.PAT }}
+      # CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
