@@ -19,3 +19,4 @@ jobs:
       os: '["ubuntu-latest", "macos-latest"]'
       toolchain: '["stable"]'
       features: '["full", "lite"]'
+      no-default-features: true
