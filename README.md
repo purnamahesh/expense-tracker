@@ -35,6 +35,11 @@ pense filter -t restaurant
 pense filter --ge 10 --le 50
 pense filter -c food -l 5
 
+# Export
+expense-tracker export --format json --output expenses.json
+expense-tracker export --format json --output expenses.json --pretty
+expense-tracker export --format json --category food --output food-expenses.json
+
 # Use a custom database path
 pense -p ./my-expenses.db list
 
